@@ -1,1 +1,23 @@
+# Binary
 cloudflare-tui
+
+# Credentials and secrets
+.env
+.env.*
+*.pem
+*.key
+*.crt
+kubeconfig
+kubeconfig.*
+credentials.json
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db

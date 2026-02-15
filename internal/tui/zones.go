@@ -3,6 +3,7 @@ package tui
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/charmbracelet/bubbles/list"
 	"github.com/charmbracelet/bubbles/spinner"
@@ -62,7 +63,9 @@ func (m ZonesModel) Init() tea.Cmd {
 func (m ZonesModel) fetchZones() tea.Cmd {
 	client := m.client
 	return func() tea.Msg {
-		zones, err := client.ListZones(context.Background())
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		zones, err := client.ListZones(ctx)
 		return zonesLoadedMsg{zones: zones, err: err}
 	}
 }
