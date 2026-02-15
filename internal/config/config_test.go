@@ -2,6 +2,7 @@ package config
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	corev1 "k8s.io/api/core/v1"
@@ -119,6 +120,9 @@ func TestLoadFromClient_SecretNotFound(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error for missing secret, got nil")
 	}
+	if !strings.Contains(err.Error(), "ns/missing") {
+		t.Errorf("error should mention secret ref, got: %v", err)
+	}
 }
 
 func TestLoadFromClient_MissingAPITokenKey(t *testing.T) {
@@ -139,6 +143,9 @@ func TestLoadFromClient_MissingAPITokenKey(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error for missing api-token key, got nil")
 	}
+	if !strings.Contains(err.Error(), "api-token") {
+		t.Errorf("error should mention missing key name, got: %v", err)
+	}
 }
 
 func TestLoadFromClient_EmptyToken(t *testing.T) {
@@ -158,5 +165,8 @@ func TestLoadFromClient_EmptyToken(t *testing.T) {
 	_, err := loadFromClient(context.Background(), client, ref)
 	if err == nil {
 		t.Fatal("expected error for empty api-token value, got nil")
+	}
+	if !strings.Contains(err.Error(), "empty") {
+		t.Errorf("error should mention empty value, got: %v", err)
 	}
 }

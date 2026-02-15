@@ -214,6 +214,29 @@ func TestListDNSRecordsError(t *testing.T) {
 	}
 }
 
+func TestListZonesNetworkFailure(t *testing.T) {
+	// Start a server and immediately close it to simulate a network failure.
+	srv := httptest.NewServer(http.NewServeMux())
+	srv.Close()
+
+	client := newTestClient(t, srv.URL)
+	_, err := client.ListZones(context.Background())
+	if err == nil {
+		t.Fatal("expected error from ListZones with closed server, got nil")
+	}
+}
+
+func TestListDNSRecordsNetworkFailure(t *testing.T) {
+	srv := httptest.NewServer(http.NewServeMux())
+	srv.Close()
+
+	client := newTestClient(t, srv.URL)
+	_, err := client.ListDNSRecords(context.Background(), "zone-1")
+	if err == nil {
+		t.Fatal("expected error from ListDNSRecords with closed server, got nil")
+	}
+}
+
 func TestNewClient(t *testing.T) {
 	cfg := &config.Config{APIToken: "my-token"}
 	client := NewClient(cfg)
