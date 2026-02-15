@@ -14,6 +14,7 @@ Create `go.mod` and pull in the three core dependencies:
 - `github.com/charmbracelet/bubbletea` — TUI framework
 - `github.com/charmbracelet/bubbles` — table component
 - `github.com/charmbracelet/lipgloss` — styling
+- `k8s.io/client-go` — Kubernetes API client (for reading secrets)
 
 Deliverable: `go.mod` and `go.sum` exist; `go build ./...` succeeds (even if main is a stub).
 
@@ -22,7 +23,7 @@ Deliverable: `go.mod` and `go.sum` exist; `go build ./...` succeeds (even if mai
 ```
 cmd/cloudflare-tui/main.go   # entrypoint — parse flags, build deps, start TUI
 internal/
-  config/config.go            # read env vars for credentials
+  config/config.go            # read Cloudflare API token from a Kubernetes secret
   api/client.go               # thin wrapper: NewClient, ListZones, ListDNSRecords
   tui/model.go                # root Bubble Tea model
   tui/zones.go                # zone-selection list view
@@ -33,11 +34,16 @@ Deliverable: all files created with minimal placeholder code; project compiles.
 
 ## Step 3: Implement credential loading (`internal/config`)
 
-- Read `CLOUDFLARE_API_TOKEN` (preferred) or `CLOUDFLARE_API_KEY` + `CLOUDFLARE_API_EMAIL`.
-- Return a simple `Config` struct.
-- Error clearly if no credentials are found.
+- Accept the `--secret` flag value (`namespace/secret-name`) and an optional `--kubeconfig` path.
+- Use `client-go` to build a Kubernetes client from the current kubeconfig context.
+- Fetch the specified Secret and extract the `api-token` key.
+- Return a `Config` struct containing the API token string.
+- Fail fast with a clear error if:
+  - `--secret` is missing or malformed.
+  - The secret does not exist or is inaccessible.
+  - The `api-token` key is absent or empty.
 
-Deliverable: `config.Load()` returns a populated `Config` or a descriptive error.
+Deliverable: `config.Load(ctx, secretRef, kubeconfig)` returns a populated `Config` or a descriptive error.
 
 ## Step 4: Implement the API layer (`internal/api`)
 
@@ -69,19 +75,20 @@ Deliverable: selecting a zone shows its DNS records in a navigable table.
 
 ## Step 7: Wire everything together in `cmd/cloudflare-tui/main.go`
 
-- Load config.
-- Create API client.
+- Parse flags: `--secret` (required, `namespace/secret-name`), `--kubeconfig` (optional).
+- Load config from the Kubernetes secret.
+- Create API client with the retrieved token.
 - Initialize root TUI model (starts on zone-selection view).
 - Run `tea.NewProgram(model).Run()`.
 - Exit cleanly on error with a human-readable message.
 
-Deliverable: `go run ./cmd/cloudflare-tui` works end-to-end.
+Deliverable: `go run ./cmd/cloudflare-tui --secret ns/name` works end-to-end.
 
 ## Step 8: Polish and basic tests
 
-- Add a test for `config.Load` (set env vars in test, verify output).
+- Add a test for `config.Load` (use a fake Kubernetes clientset to verify secret reading).
 - Add a test for API struct mapping (unit test with mocked responses if practical).
-- Verify graceful error handling: no token set, invalid token, network failure.
+- Verify graceful error handling: missing secret, missing `api-token` key, invalid token, network failure.
 - Add a one-line usage note to `README.md`.
 
 Deliverable: `go test ./...` passes; README has basic run instructions.
@@ -90,8 +97,8 @@ Deliverable: `go test ./...` passes; README has basic run instructions.
 
 ## Out of Scope (future milestones)
 
-- Kubernetes-based credential loading
 - Creating / editing / deleting DNS records
 - Multiple account support
+- Alternative credential sources (env vars, local files)
 - Caching or pagination beyond what cloudflare-go handles
 - CI/CD pipeline

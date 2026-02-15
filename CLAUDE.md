@@ -2,13 +2,14 @@
 
 ## Project Overview
 
-A Go-based terminal UI for interacting with the Cloudflare API. The initial goal is listing DNS records for a specified zone. Credentials are ultimately sourced from a Kubernetes cluster, but the MVP supports environment variables.
+A Go-based terminal UI for interacting with the Cloudflare API. The initial goal is listing DNS records for a specified zone. Credentials are read from a Kubernetes secret specified at launch time.
 
 ## Tech Stack
 
 - **Language:** Go (1.22+)
 - **TUI framework:** [Bubble Tea](https://github.com/charmbracelet/bubbletea) with [Lip Gloss](https://github.com/charmbracelet/lipgloss) for styling and [Bubbles](https://github.com/charmbracelet/bubbles) for common components (tables, spinners, text input)
 - **Cloudflare SDK:** [cloudflare-go](https://github.com/cloudflare/cloudflare-go) (official Go library)
+- **Kubernetes:** [client-go](https://github.com/kubernetes/client-go) for reading secrets from a cluster
 - **Build:** standard `go build` / `go run`
 
 ## Commands
@@ -17,8 +18,8 @@ A Go-based terminal UI for interacting with the Cloudflare API. The initial goal
 # Build
 go build -o cloudflare-tui ./cmd/cloudflare-tui
 
-# Run
-go run ./cmd/cloudflare-tui
+# Run (--secret is required: namespace/secret-name)
+go run ./cmd/cloudflare-tui --secret my-namespace/cloudflare-creds
 
 # Test
 go test ./...
@@ -34,7 +35,7 @@ cmd/cloudflare-tui/    # main entrypoint
 internal/
   api/                 # Cloudflare API client wrapper
   tui/                 # Bubble Tea models, views, updates
-  config/              # Configuration / credential loading
+  config/              # Configuration / credential loading from Kubernetes
 ```
 
 ## Code Conventions
@@ -49,12 +50,12 @@ internal/
 
 ## Authentication
 
-For the MVP, the app reads credentials from environment variables:
+The app reads a Cloudflare API token from a Kubernetes secret. The secret is specified at launch via a required `--secret` flag in `namespace/secret-name` format.
 
-- `CLOUDFLARE_API_TOKEN` — scoped API token (preferred)
-- `CLOUDFLARE_API_KEY` + `CLOUDFLARE_API_EMAIL` — legacy global key (fallback)
-
-A future milestone will add Kubernetes secret-based credential loading.
+- The secret must contain a key named `api-token` whose value is a scoped Cloudflare API token.
+- The app uses the current kubeconfig context (respects `KUBECONFIG` env var and `--kubeconfig` flag).
+- No environment-variable or local-file credential paths exist. Kubernetes is the sole credential source.
+- The app fails fast with a clear error if the secret is missing, inaccessible, or lacks the `api-token` key.
 
 ## Guiding Principles
 
