@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strconv"
+	"time"
 
 	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/bubbles/table"
@@ -56,7 +57,9 @@ func (m RecordsModel) fetchRecords() tea.Cmd {
 	client := m.client
 	zoneID := m.zone.ID
 	return func() tea.Msg {
-		records, err := client.ListDNSRecords(context.Background(), zoneID)
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		records, err := client.ListDNSRecords(ctx, zoneID)
 		return recordsLoadedMsg{records: records, err: err}
 	}
 }
