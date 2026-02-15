@@ -1,0 +1,63 @@
+# CLAUDE.md — cloudflare-tui
+
+## Project Overview
+
+A Go-based terminal UI for interacting with the Cloudflare API. The initial goal is listing DNS records for a specified zone. Credentials are ultimately sourced from a Kubernetes cluster, but the MVP supports environment variables.
+
+## Tech Stack
+
+- **Language:** Go (1.22+)
+- **TUI framework:** [Bubble Tea](https://github.com/charmbracelet/bubbletea) with [Lip Gloss](https://github.com/charmbracelet/lipgloss) for styling and [Bubbles](https://github.com/charmbracelet/bubbles) for common components (tables, spinners, text input)
+- **Cloudflare SDK:** [cloudflare-go](https://github.com/cloudflare/cloudflare-go) (official Go library)
+- **Build:** standard `go build` / `go run`
+
+## Commands
+
+```bash
+# Build
+go build -o cloudflare-tui ./cmd/cloudflare-tui
+
+# Run
+go run ./cmd/cloudflare-tui
+
+# Test
+go test ./...
+
+# Lint (if golangci-lint is available)
+golangci-lint run ./...
+```
+
+## Project Structure
+
+```
+cmd/cloudflare-tui/    # main entrypoint
+internal/
+  api/                 # Cloudflare API client wrapper
+  tui/                 # Bubble Tea models, views, updates
+  config/              # Configuration / credential loading
+```
+
+## Code Conventions
+
+- Keep packages small and focused. `internal/` for all non-main code.
+- Bubble Tea models live in `internal/tui/`. One file per major view/screen.
+- API interactions are wrapped in `internal/api/` — never call cloudflare-go directly from TUI code.
+- Use `context.Context` for all API calls.
+- Errors from the API should surface as user-visible messages inside the TUI, not panics.
+- No global state. Pass dependencies through struct fields.
+- Tests go in `_test.go` files next to the code they test.
+
+## Authentication
+
+For the MVP, the app reads credentials from environment variables:
+
+- `CLOUDFLARE_API_TOKEN` — scoped API token (preferred)
+- `CLOUDFLARE_API_KEY` + `CLOUDFLARE_API_EMAIL` — legacy global key (fallback)
+
+A future milestone will add Kubernetes secret-based credential loading.
+
+## Guiding Principles
+
+- **Minimum viable first.** Ship the smallest thing that works, then iterate.
+- **Separation of concerns.** TUI rendering knows nothing about HTTP; API layer knows nothing about terminal rendering.
+- **No over-abstraction.** Don't build interfaces or generics until there are at least two concrete consumers.
