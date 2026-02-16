@@ -6,7 +6,7 @@ A terminal UI for browsing Cloudflare DNS records, powered by credentials stored
 
 - Go 1.22+
 - Access to a Kubernetes cluster with a secret containing a Cloudflare API token
-- The secret must have a key named `api-token`
+- The secret must have a key named `cloudflare_api_token`
 
 ## Build
 
@@ -30,7 +30,7 @@ cloudflare-tui --secret <namespace>/<secret-name>
 cloudflare-tui --secret my-namespace/cloudflare-creds --kubeconfig ~/.kube/config
 ```
 
-The `--secret` flag is required and points to a Kubernetes secret in `namespace/secret-name` format. The secret must contain an `api-token` key with a valid Cloudflare API token.
+The `--secret` flag is required and points to a Kubernetes secret in `namespace/secret-name` format. The secret must contain a `cloudflare_api_token` key with a valid Cloudflare API token.
 
 ## Navigation
 
@@ -75,7 +75,7 @@ Create the secret containing your scoped Cloudflare API token:
 ```bash
 kubectl create secret generic cloudflare-creds \
   --namespace=my-namespace \
-  --from-literal=api-token=<your-cloudflare-api-token>
+  --from-literal=cloudflare_api_token=<your-cloudflare-api-token>
 ```
 
 See [SECURITY.md](SECURITY.md) for the minimal RBAC role needed to read this secret.

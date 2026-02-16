@@ -75,7 +75,7 @@ func TestLoadFromClient_Success(t *testing.T) {
 			Namespace: "infra",
 		},
 		Data: map[string][]byte{
-			"api-token": []byte("my-test-token"),
+			"cloudflare_api_token": []byte("my-test-token"),
 		},
 	}
 
@@ -98,7 +98,7 @@ func TestLoadFromClient_TokenTrimmed(t *testing.T) {
 			Namespace: "ns",
 		},
 		Data: map[string][]byte{
-			"api-token": []byte("  token-with-whitespace \n"),
+			"cloudflare_api_token": []byte("  token-with-whitespace \n"),
 		},
 	}
 
@@ -141,9 +141,9 @@ func TestLoadFromClient_MissingAPITokenKey(t *testing.T) {
 
 	_, err := loadFromClient(context.Background(), client, ref)
 	if err == nil {
-		t.Fatal("expected error for missing api-token key, got nil")
+		t.Fatal("expected error for missing cloudflare_api_token key, got nil")
 	}
-	if !strings.Contains(err.Error(), "api-token") {
+	if !strings.Contains(err.Error(), "cloudflare_api_token") {
 		t.Errorf("error should mention missing key name, got: %v", err)
 	}
 }
@@ -155,7 +155,7 @@ func TestLoadFromClient_EmptyToken(t *testing.T) {
 			Namespace: "ns",
 		},
 		Data: map[string][]byte{
-			"api-token": []byte("   "),
+			"cloudflare_api_token": []byte("   "),
 		},
 	}
 
@@ -164,7 +164,7 @@ func TestLoadFromClient_EmptyToken(t *testing.T) {
 
 	_, err := loadFromClient(context.Background(), client, ref)
 	if err == nil {
-		t.Fatal("expected error for empty api-token value, got nil")
+		t.Fatal("expected error for empty cloudflare_api_token value, got nil")
 	}
 	if !strings.Contains(err.Error(), "empty") {
 		t.Errorf("error should mention empty value, got: %v", err)
