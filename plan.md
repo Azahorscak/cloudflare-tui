@@ -1,8 +1,11 @@
-# Plan: MVP — List DNS Records for a Zone
+# Plan: DNS Record Viewer and Editor
 
 ## Goal
 
-The absolute minimum useful action: given a Cloudflare zone, display its DNS records in an interactive terminal table.
+Given a Cloudflare zone, display its DNS records in an interactive terminal table and allow selecting individual records to edit them in-place.
+
+### Milestone 1 (Steps 1–8): List DNS records for a zone
+### Milestone 2 (Steps 9–14): Select and edit a DNS record
 
 ---
 
@@ -95,9 +98,84 @@ Deliverable: `go test ./...` passes; README has basic run instructions.
 
 ---
 
+## Step 9: Extend the API layer with update and record-ID support
+
+- Add an `ID` field to the `api.DNSRecord` struct so individual records can be targeted.
+- Populate `ID` from the Cloudflare SDK response in `ListDNSRecords`.
+- Add `GetDNSRecord(ctx, zoneID, recordID) (DNSRecord, error)` — fetches a single record (used to refresh after edit).
+- Add `UpdateDNSRecord(ctx, zoneID, recordID, params UpdateDNSRecordParams) (DNSRecord, error)`:
+  - `UpdateDNSRecordParams` contains the editable fields: `Name`, `Type`, `Content`, `TTL`, `Proxied`.
+  - Maps to the cloudflare-go `DNS.Records.Update` call.
+  - Returns the updated record or a descriptive error.
+- Add unit tests with HTTP mocks for both new functions.
+
+Deliverable: `api.Client` can read and update individual DNS records; `go test ./internal/api/...` passes.
+
+## Step 10: Build the record-edit view (`internal/tui/edit.go`)
+
+- Create an `EditModel` struct that represents a form for editing a single DNS record.
+- Display the current record values as pre-filled text inputs using `bubbles/textinput` for editable string fields (`Name`, `Content`, `TTL`).
+- Use a toggle or key binding for the `Proxied` boolean (e.g., `Tab` to toggle Yes/No).
+- Display `Type` as read-only (changing a record's type typically requires delete + recreate).
+- Show the record type and current zone name in a header for context.
+- Layout the form fields vertically with labels, using lipgloss for alignment and styling.
+
+Deliverable: `EditModel` renders a populated edit form; compiles and can be instantiated from test code.
+
+## Step 11: Add form navigation and input handling to the edit view
+
+- Support `Tab` / `Shift+Tab` to move focus between form fields.
+- Support `Enter` on the submit button to trigger the save action.
+- Support `Esc` to cancel and return to the records table without saving.
+- Add client-side validation before submitting:
+  - `Name` must be non-empty.
+  - `Content` must be non-empty.
+  - `TTL` must be a positive integer or "Auto" (mapped to `1`).
+- Display inline validation errors below the relevant field in a warning style.
+
+Deliverable: form fields are navigable and editable; validation prevents obviously bad submissions.
+
+## Step 12: Wire up the save action and success/error feedback
+
+- When the user submits the form, fire a `Cmd` that calls `api.UpdateDNSRecord` with the edited values.
+- Show a spinner or "Saving…" indicator while the API call is in flight.
+- On success:
+  - Emit a message that transitions back to the records table.
+  - Refresh the records list so the table reflects the updated values.
+  - Show a brief success status message (e.g., in the help bar area).
+- On error:
+  - Stay on the edit form.
+  - Display the API error message prominently so the user can correct and retry.
+
+Deliverable: editing a record and pressing Enter persists the change to Cloudflare; errors are visible and recoverable.
+
+## Step 13: Integrate the edit view into the root model and records table
+
+- In `RecordsModel`, handle `Enter` on a selected table row to emit an `editRecordMsg` containing the selected `DNSRecord` (requires storing the full record list alongside the table rows so the ID is accessible).
+- In the root `Model`, add `ViewEdit` to the `View` enum.
+- Handle `editRecordMsg`: create a new `EditModel` for the selected record, set `currentView = ViewEdit`.
+- Handle a new `backToRecordsMsg` (from cancel or successful save): set `currentView = ViewRecords`.
+- On successful save, also trigger a records refresh so the table is up to date.
+- Update the records table help bar to indicate `Enter: edit record`.
+
+Deliverable: full navigation loop works — zones → records → edit → records; the table updates after a save.
+
+## Step 14: Tests and polish for the edit flow
+
+- Add unit tests for `EditModel`: verify initial field population, tab navigation order, validation error messages, and message emission on submit/cancel.
+- Add an integration-style test that simulates the full flow: select zone → select record → edit content → save → verify table refresh (using mocked API).
+- Verify edge cases: editing a record with a very long content value, TTL boundary values (1 = Auto, minimum non-auto value), toggling proxied on record types that don't support it.
+- Update the help bar / key hints on all views to reflect the new navigation options.
+- Update `README.md` with a note about the editing capability.
+
+Deliverable: `go test ./...` passes; edit flow is stable and discoverable.
+
+---
+
 ## Out of Scope (future milestones)
 
-- Creating / editing / deleting DNS records
+- Creating / deleting DNS records
+- Bulk editing multiple records at once
 - Multiple account support
 - Alternative credential sources (env vars, local files)
 - Caching or pagination beyond what cloudflare-go handles
