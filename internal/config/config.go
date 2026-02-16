@@ -84,14 +84,14 @@ func loadFromClient(ctx context.Context, client kubernetes.Interface, ref secret
 		return nil, fmt.Errorf("fetching secret %s/%s: %w", ref.Namespace, ref.Name, err)
 	}
 
-	token, ok := secret.Data["api-token"]
+	token, ok := secret.Data["cloudflare_api_token"]
 	if !ok {
-		return nil, fmt.Errorf("secret %s/%s does not contain key \"api-token\"", ref.Namespace, ref.Name)
+		return nil, fmt.Errorf("secret %s/%s does not contain key \"cloudflare_api_token\"", ref.Namespace, ref.Name)
 	}
 
 	tokenStr := strings.TrimSpace(string(token))
 	if tokenStr == "" {
-		return nil, fmt.Errorf("secret %s/%s has an empty \"api-token\" value", ref.Namespace, ref.Name)
+		return nil, fmt.Errorf("secret %s/%s has an empty \"cloudflare_api_token\" value", ref.Namespace, ref.Name)
 	}
 
 	return &Config{APIToken: tokenStr}, nil

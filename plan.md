@@ -36,12 +36,12 @@ Deliverable: all files created with minimal placeholder code; project compiles.
 
 - Accept the `--secret` flag value (`namespace/secret-name`) and an optional `--kubeconfig` path.
 - Use `client-go` to build a Kubernetes client from the current kubeconfig context.
-- Fetch the specified Secret and extract the `api-token` key.
+- Fetch the specified Secret and extract the `cloudflare_api_token` key.
 - Return a `Config` struct containing the API token string.
 - Fail fast with a clear error if:
   - `--secret` is missing or malformed.
   - The secret does not exist or is inaccessible.
-  - The `api-token` key is absent or empty.
+  - The `cloudflare_api_token` key is absent or empty.
 
 Deliverable: `config.Load(ctx, secretRef, kubeconfig)` returns a populated `Config` or a descriptive error.
 
@@ -88,7 +88,7 @@ Deliverable: `go run ./cmd/cloudflare-tui --secret ns/name` works end-to-end.
 
 - Add a test for `config.Load` (use a fake Kubernetes clientset to verify secret reading).
 - Add a test for API struct mapping (unit test with mocked responses if practical).
-- Verify graceful error handling: missing secret, missing `api-token` key, invalid token, network failure.
+- Verify graceful error handling: missing secret, missing `cloudflare_api_token` key, invalid token, network failure.
 - Add a one-line usage note to `README.md`.
 
 Deliverable: `go test ./...` passes; README has basic run instructions.

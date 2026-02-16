@@ -52,10 +52,10 @@ internal/
 
 The app reads a Cloudflare API token from a Kubernetes secret. The secret is specified at launch via a required `--secret` flag in `namespace/secret-name` format.
 
-- The secret must contain a key named `api-token` whose value is a scoped Cloudflare API token.
+- The secret must contain a key named `cloudflare_api_token` whose value is a scoped Cloudflare API token.
 - The app uses the current kubeconfig context (respects `KUBECONFIG` env var and `--kubeconfig` flag).
 - No environment-variable or local-file credential paths exist. Kubernetes is the sole credential source.
-- The app fails fast with a clear error if the secret is missing, inaccessible, or lacks the `api-token` key.
+- The app fails fast with a clear error if the secret is missing, inaccessible, or lacks the `cloudflare_api_token` key.
 
 ## Guiding Principles
 
