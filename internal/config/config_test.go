@@ -82,7 +82,7 @@ func TestLoadFromClient_Success(t *testing.T) {
 	client := fake.NewSimpleClientset(secret)
 	ref := secretRef{Namespace: "infra", Name: "cloudflare-creds"}
 
-	cfg, err := loadFromClient(context.Background(), client, ref)
+	cfg, err := loadFromClient(context.Background(), client, ref, "cloudflare_api_token")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -103,7 +103,7 @@ func TestLoadFromClient_TokenTrimmed(t *testing.T) {
 	}
 
 	client := fake.NewSimpleClientset(secret)
-	cfg, err := loadFromClient(context.Background(), client, secretRef{Namespace: "ns", Name: "creds"})
+	cfg, err := loadFromClient(context.Background(), client, secretRef{Namespace: "ns", Name: "creds"}, "cloudflare_api_token")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -116,7 +116,7 @@ func TestLoadFromClient_SecretNotFound(t *testing.T) {
 	client := fake.NewSimpleClientset() // no secrets
 	ref := secretRef{Namespace: "ns", Name: "missing"}
 
-	_, err := loadFromClient(context.Background(), client, ref)
+	_, err := loadFromClient(context.Background(), client, ref, "cloudflare_api_token")
 	if err == nil {
 		t.Fatal("expected error for missing secret, got nil")
 	}
@@ -139,7 +139,7 @@ func TestLoadFromClient_MissingAPITokenKey(t *testing.T) {
 	client := fake.NewSimpleClientset(secret)
 	ref := secretRef{Namespace: "ns", Name: "creds"}
 
-	_, err := loadFromClient(context.Background(), client, ref)
+	_, err := loadFromClient(context.Background(), client, ref, "cloudflare_api_token")
 	if err == nil {
 		t.Fatal("expected error for missing cloudflare_api_token key, got nil")
 	}
@@ -162,11 +162,34 @@ func TestLoadFromClient_EmptyToken(t *testing.T) {
 	client := fake.NewSimpleClientset(secret)
 	ref := secretRef{Namespace: "ns", Name: "creds"}
 
-	_, err := loadFromClient(context.Background(), client, ref)
+	_, err := loadFromClient(context.Background(), client, ref, "cloudflare_api_token")
 	if err == nil {
 		t.Fatal("expected error for empty cloudflare_api_token value, got nil")
 	}
 	if !strings.Contains(err.Error(), "empty") {
 		t.Errorf("error should mention empty value, got: %v", err)
+	}
+}
+
+func TestLoadFromClient_CustomSecretKey(t *testing.T) {
+	secret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "creds",
+			Namespace: "ns",
+		},
+		Data: map[string][]byte{
+			"my_custom_key": []byte("custom-token"),
+		},
+	}
+
+	client := fake.NewSimpleClientset(secret)
+	ref := secretRef{Namespace: "ns", Name: "creds"}
+
+	cfg, err := loadFromClient(context.Background(), client, ref, "my_custom_key")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.APIToken != "custom-token" {
+		t.Errorf("got token %q, want %q", cfg.APIToken, "custom-token")
 	}
 }
