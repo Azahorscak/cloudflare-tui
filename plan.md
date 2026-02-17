@@ -111,7 +111,7 @@ Deliverable: `go test ./...` passes; README has basic run instructions.
 
 Deliverable: `api.Client` can read and update individual DNS records; `go test ./internal/api/...` passes.
 
-## Step 10: Build the record-edit view (`internal/tui/edit.go`)
+## Step 10: Build the record-edit view (`internal/tui/edit.go`) ✅
 
 - Create an `EditModel` struct that represents a form for editing a single DNS record.
 - Display the current record values as pre-filled text inputs using `bubbles/textinput` for editable string fields (`Name`, `Content`, `TTL`).
