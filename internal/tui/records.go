@@ -20,10 +20,16 @@ type recordsLoadedMsg struct {
 	err     error
 }
 
+// editRecordMsg signals that the user wants to edit a DNS record.
+type editRecordMsg struct {
+	record api.DNSRecord
+}
+
 // RecordsModel handles the DNS records table view.
 type RecordsModel struct {
 	client  *api.Client
 	zone    api.Zone
+	records []api.DNSRecord
 	table   table.Model
 	spinner spinner.Model
 	loading bool
@@ -139,6 +145,7 @@ func (m RecordsModel) Update(msg tea.Msg) (RecordsModel, tea.Cmd) {
 			m.err = msg.err
 			return m, nil
 		}
+		m.records = msg.records
 		m.table = m.buildTable(msg.records)
 		return m, nil
 
@@ -146,6 +153,13 @@ func (m RecordsModel) Update(msg tea.Msg) (RecordsModel, tea.Cmd) {
 		key := msg.String()
 		if key == "q" || key == "esc" {
 			return m, func() tea.Msg { return backToZonesMsg{} }
+		}
+		if key == "enter" && !m.loading && m.err == nil && len(m.records) > 0 {
+			cursor := m.table.Cursor()
+			if cursor >= 0 && cursor < len(m.records) {
+				record := m.records[cursor]
+				return m, func() tea.Msg { return editRecordMsg{record: record} }
+			}
 		}
 	}
 
@@ -174,7 +188,7 @@ func (m RecordsModel) View() string {
 	help := lipgloss.NewStyle().
 		Faint(true).
 		Padding(1, 0, 0, 2).
-		Render("q/Esc: back | Ctrl+C: quit")
+		Render("Enter: edit record | q/Esc: back | Ctrl+C: quit")
 
 	return header + "\n" + m.table.View() + "\n" + help
 }
