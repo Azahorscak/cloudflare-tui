@@ -4,12 +4,12 @@
 
 Given a Cloudflare zone, display its DNS records in an interactive terminal table and allow selecting individual records to edit them in-place.
 
-### Milestone 1 (Steps 1–8): List DNS records for a zone
+### Milestone 1 (Steps 1–8): List DNS records for a zone ✅
 ### Milestone 2 (Steps 9–14): Select and edit a DNS record
 
 ---
 
-## Step 1: Initialize the Go module and install dependencies
+## Step 1: Initialize the Go module and install dependencies ✅
 
 Create `go.mod` and pull in the three core dependencies:
 
@@ -21,7 +21,7 @@ Create `go.mod` and pull in the three core dependencies:
 
 Deliverable: `go.mod` and `go.sum` exist; `go build ./...` succeeds (even if main is a stub).
 
-## Step 2: Scaffold the directory structure
+## Step 2: Scaffold the directory structure ✅
 
 ```
 cmd/cloudflare-tui/main.go   # entrypoint — parse flags, build deps, start TUI
@@ -35,7 +35,7 @@ internal/
 
 Deliverable: all files created with minimal placeholder code; project compiles.
 
-## Step 3: Implement credential loading (`internal/config`)
+## Step 3: Implement credential loading (`internal/config`) ✅
 
 - Accept the `--secret` flag value (`namespace/secret-name`) and an optional `--kubeconfig` path.
 - Use `client-go` to build a Kubernetes client from the current kubeconfig context.
@@ -48,7 +48,7 @@ Deliverable: all files created with minimal placeholder code; project compiles.
 
 Deliverable: `config.Load(ctx, secretRef, kubeconfig)` returns a populated `Config` or a descriptive error.
 
-## Step 4: Implement the API layer (`internal/api`)
+## Step 4: Implement the API layer (`internal/api`) ✅
 
 - `NewClient(cfg config.Config)` — creates an authenticated `cloudflare-go` client.
 - `ListZones(ctx) ([]Zone, error)` — returns zone ID + name for all zones the token can see.
@@ -58,7 +58,7 @@ Keep return types as thin structs (not raw cloudflare-go types) so the TUI never
 
 Deliverable: API functions work when called from a throwaway `main()` with real credentials.
 
-## Step 5: Build the zone-selection view (`internal/tui/zones.go`)
+## Step 5: Build the zone-selection view (`internal/tui/zones.go`) ✅
 
 - On startup, fire a Bubble Tea `Cmd` that calls `api.ListZones`.
 - Show a spinner while loading.
@@ -67,7 +67,7 @@ Deliverable: API functions work when called from a throwaway `main()` with real 
 
 Deliverable: running the app shows a list of zones; pressing Enter on one transitions forward.
 
-## Step 6: Build the DNS records table view (`internal/tui/records.go`)
+## Step 6: Build the DNS records table view (`internal/tui/records.go`) ✅
 
 - On entry, fire a `Cmd` that calls `api.ListDNSRecords` for the selected zone.
 - Show a spinner while loading.
@@ -76,7 +76,7 @@ Deliverable: running the app shows a list of zones; pressing Enter on one transi
 
 Deliverable: selecting a zone shows its DNS records in a navigable table.
 
-## Step 7: Wire everything together in `cmd/cloudflare-tui/main.go`
+## Step 7: Wire everything together in `cmd/cloudflare-tui/main.go` ✅
 
 - Parse flags: `--secret` (required, `namespace/secret-name`), `--kubeconfig` (optional).
 - Load config from the Kubernetes secret.
@@ -87,7 +87,7 @@ Deliverable: selecting a zone shows its DNS records in a navigable table.
 
 Deliverable: `go run ./cmd/cloudflare-tui --secret ns/name` works end-to-end.
 
-## Step 8: Polish and basic tests
+## Step 8: Polish and basic tests ✅
 
 - Add a test for `config.Load` (use a fake Kubernetes clientset to verify secret reading).
 - Add a test for API struct mapping (unit test with mocked responses if practical).
