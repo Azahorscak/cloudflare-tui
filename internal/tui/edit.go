@@ -3,6 +3,7 @@ package tui
 import (
 	"fmt"
 	"strconv"
+	"strings"
 
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
@@ -19,9 +20,20 @@ const (
 	fieldContent
 	fieldTTL
 	fieldProxied
+	fieldSubmit
 )
 
-const editFieldCount = 4
+const editFieldCount = 5
+
+// cancelEditMsg signals that the user cancelled editing.
+type cancelEditMsg struct{}
+
+// submitEditMsg carries the validated edit data for saving.
+type submitEditMsg struct {
+	zoneID   string
+	recordID string
+	params   api.UpdateDNSRecordParams
+}
 
 // EditModel represents a form for editing a single DNS record.
 type EditModel struct {
@@ -36,6 +48,7 @@ type EditModel struct {
 	proxied      bool
 
 	focused editField
+	errors  map[editField]string
 	width   int
 	height  int
 }
@@ -75,12 +88,13 @@ func NewEditModel(client *api.Client, zoneID, zoneName string, record api.DNSRec
 		ttlInput:     ttlInput,
 		proxied:      record.Proxied,
 		focused:      fieldName,
+		errors:       make(map[editField]string),
 		width:        width,
 		height:       height,
 	}
 }
 
-// Init returns nil; no initial commands needed.
+// Init returns the text input blink command.
 func (m EditModel) Init() tea.Cmd {
 	return textinput.Blink
 }
@@ -103,6 +117,18 @@ func (m EditModel) Update(msg tea.Msg) (EditModel, tea.Cmd) {
 			m.focused = (m.focused - 1 + editFieldCount) % editFieldCount
 			m.updateFocus()
 			return m, nil
+		case "esc":
+			return m, func() tea.Msg { return cancelEditMsg{} }
+		case "enter":
+			if m.focused == fieldSubmit {
+				errs := m.validate()
+				if len(errs) > 0 {
+					m.errors = errs
+					return m, nil
+				}
+				m.errors = make(map[editField]string)
+				return m, m.submitCmd()
+			}
 		}
 	}
 
@@ -123,6 +149,49 @@ func (m EditModel) Update(msg tea.Msg) (EditModel, tea.Cmd) {
 		}
 	}
 	return m, cmd
+}
+
+// validate checks form values and returns a map of field errors.
+func (m EditModel) validate() map[editField]string {
+	errs := make(map[editField]string)
+	if strings.TrimSpace(m.nameInput.Value()) == "" {
+		errs[fieldName] = "Name must be non-empty"
+	}
+	if strings.TrimSpace(m.contentInput.Value()) == "" {
+		errs[fieldContent] = "Content must be non-empty"
+	}
+	ttl := strings.TrimSpace(m.ttlInput.Value())
+	if strings.EqualFold(ttl, "auto") {
+		// valid — maps to TTL 1
+	} else {
+		n, err := strconv.Atoi(ttl)
+		if err != nil || n <= 0 {
+			errs[fieldTTL] = "TTL must be a positive integer or \"Auto\""
+		}
+	}
+	return errs
+}
+
+// submitCmd builds a command that emits a submitEditMsg with the current form values.
+func (m EditModel) submitCmd() tea.Cmd {
+	ttl := 1
+	ttlStr := strings.TrimSpace(m.ttlInput.Value())
+	if !strings.EqualFold(ttlStr, "auto") {
+		ttl, _ = strconv.Atoi(ttlStr) // already validated
+	}
+	return func() tea.Msg {
+		return submitEditMsg{
+			zoneID:   m.zoneID,
+			recordID: m.record.ID,
+			params: api.UpdateDNSRecordParams{
+				Name:    strings.TrimSpace(m.nameInput.Value()),
+				Type:    m.record.Type,
+				Content: strings.TrimSpace(m.contentInput.Value()),
+				TTL:     ttl,
+				Proxied: m.proxied,
+			},
+		}
+	}
 }
 
 // updateFocus sets the focused state on each text input.
@@ -169,6 +238,20 @@ func (m EditModel) View() string {
 		Foreground(lipgloss.Color("205"))
 
 	proxiedStyle := lipgloss.NewStyle().
+		Padding(0, 1)
+
+	errorStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("196")).
+		Padding(0, 0, 0, 12)
+
+	submitStyle := lipgloss.NewStyle().
+		Bold(true).
+		Padding(0, 0, 0, 2)
+
+	focusedSubmitStyle := lipgloss.NewStyle().
+		Bold(true).
+		Foreground(lipgloss.Color("229")).
+		Background(lipgloss.Color("57")).
 		Padding(0, 1)
 
 	helpStyle := lipgloss.NewStyle().
@@ -234,18 +317,37 @@ func (m EditModel) View() string {
 		proxiedStyle.Render(proxiedValue),
 	)
 
-	help := helpStyle.Render("Tab/Shift+Tab: navigate | Space: toggle proxied | Esc: cancel")
+	// Submit button
+	submitText := "[ Save ]"
+	if m.focused == fieldSubmit {
+		submitText = focusedSubmitStyle.Render(submitText)
+	} else {
+		submitText = submitStyle.Render(submitText)
+	}
 
-	return lipgloss.JoinVertical(lipgloss.Left,
-		subtitle,
-		"",
-		typeRow,
-		nameRow,
-		contentRow,
-		ttlRow,
-		proxiedRow,
-		help,
-	)
+	help := helpStyle.Render("Tab/Shift+Tab: navigate | Enter: save | Esc: cancel")
+
+	// Build the view with inline validation errors
+	sections := []string{subtitle, "", typeRow}
+
+	sections = append(sections, nameRow)
+	if err, ok := m.errors[fieldName]; ok {
+		sections = append(sections, errorStyle.Render("! "+err))
+	}
+
+	sections = append(sections, contentRow)
+	if err, ok := m.errors[fieldContent]; ok {
+		sections = append(sections, errorStyle.Render("! "+err))
+	}
+
+	sections = append(sections, ttlRow)
+	if err, ok := m.errors[fieldTTL]; ok {
+		sections = append(sections, errorStyle.Render("! "+err))
+	}
+
+	sections = append(sections, proxiedRow, "", submitText, help)
+
+	return lipgloss.JoinVertical(lipgloss.Left, sections...)
 }
 
 // Proxied returns the current proxied toggle value.
@@ -271,4 +373,9 @@ func (m EditModel) ContentValue() string {
 // TTLValue returns the current value of the TTL input.
 func (m EditModel) TTLValue() string {
 	return m.ttlInput.Value()
+}
+
+// Errors returns the current validation errors.
+func (m EditModel) Errors() map[editField]string {
+	return m.errors
 }
