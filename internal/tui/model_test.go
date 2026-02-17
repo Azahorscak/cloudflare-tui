@@ -187,3 +187,172 @@ type testError struct {
 }
 
 func (e *testError) Error() string { return e.msg }
+
+// --- EditModel tests ---
+
+func newTestRecord() api.DNSRecord {
+	return api.DNSRecord{
+		ID:      "rec-1",
+		Type:    "A",
+		Name:    "example.com",
+		Content: "192.0.2.1",
+		TTL:     300,
+		Proxied: true,
+	}
+}
+
+func TestEditModel_InitialFieldPopulation(t *testing.T) {
+	rec := newTestRecord()
+	m := NewEditModel(nil, "zone-1", "example.com", rec, 80, 24)
+
+	if m.NameValue() != "example.com" {
+		t.Errorf("expected name 'example.com', got %q", m.NameValue())
+	}
+	if m.ContentValue() != "192.0.2.1" {
+		t.Errorf("expected content '192.0.2.1', got %q", m.ContentValue())
+	}
+	if m.TTLValue() != "300" {
+		t.Errorf("expected TTL '300', got %q", m.TTLValue())
+	}
+	if m.Proxied() != true {
+		t.Error("expected proxied to be true")
+	}
+	if m.Focused() != fieldName {
+		t.Errorf("expected initial focus on fieldName, got %d", m.Focused())
+	}
+}
+
+func TestEditModel_TTLAutoDisplay(t *testing.T) {
+	rec := newTestRecord()
+	rec.TTL = 1
+	m := NewEditModel(nil, "zone-1", "example.com", rec, 80, 24)
+
+	if m.TTLValue() != "Auto" {
+		t.Errorf("expected TTL 'Auto' for TTL=1, got %q", m.TTLValue())
+	}
+}
+
+func TestEditModel_TabCyclesFocus(t *testing.T) {
+	rec := newTestRecord()
+	m := NewEditModel(nil, "zone-1", "example.com", rec, 80, 24)
+
+	if m.Focused() != fieldName {
+		t.Fatalf("expected initial focus on fieldName, got %d", m.Focused())
+	}
+
+	// Tab to content
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyTab})
+	if m.Focused() != fieldContent {
+		t.Errorf("expected focus on fieldContent after tab, got %d", m.Focused())
+	}
+
+	// Tab to TTL
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyTab})
+	if m.Focused() != fieldTTL {
+		t.Errorf("expected focus on fieldTTL after tab, got %d", m.Focused())
+	}
+
+	// Tab to proxied
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyTab})
+	if m.Focused() != fieldProxied {
+		t.Errorf("expected focus on fieldProxied after tab, got %d", m.Focused())
+	}
+
+	// Tab wraps to name
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyTab})
+	if m.Focused() != fieldName {
+		t.Errorf("expected focus to wrap to fieldName, got %d", m.Focused())
+	}
+}
+
+func TestEditModel_ShiftTabReversesFocus(t *testing.T) {
+	rec := newTestRecord()
+	m := NewEditModel(nil, "zone-1", "example.com", rec, 80, 24)
+
+	// Shift+Tab from name wraps to proxied
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyShiftTab})
+	if m.Focused() != fieldProxied {
+		t.Errorf("expected focus on fieldProxied after shift+tab, got %d", m.Focused())
+	}
+
+	// Shift+Tab to TTL
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyShiftTab})
+	if m.Focused() != fieldTTL {
+		t.Errorf("expected focus on fieldTTL after shift+tab, got %d", m.Focused())
+	}
+}
+
+func TestEditModel_ProxiedToggle(t *testing.T) {
+	rec := newTestRecord()
+	rec.Proxied = false
+	m := NewEditModel(nil, "zone-1", "example.com", rec, 80, 24)
+
+	if m.Proxied() {
+		t.Fatal("expected proxied to start as false")
+	}
+
+	// Navigate to proxied field
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyTab}) // -> content
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyTab}) // -> TTL
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyTab}) // -> proxied
+
+	// Toggle with space
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{' '}})
+	if !m.Proxied() {
+		t.Error("expected proxied to be true after space toggle")
+	}
+
+	// Toggle back with space
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{' '}})
+	if m.Proxied() {
+		t.Error("expected proxied to be false after second space toggle")
+	}
+}
+
+func TestEditModel_ViewRendersHeader(t *testing.T) {
+	rec := newTestRecord()
+	m := NewEditModel(nil, "zone-1", "example.com", rec, 80, 24)
+	view := m.View()
+
+	if !strings.Contains(view, "Edit") {
+		t.Error("expected view to contain 'Edit'")
+	}
+	if !strings.Contains(view, "A") {
+		t.Error("expected view to contain record type 'A'")
+	}
+	if !strings.Contains(view, "example.com") {
+		t.Error("expected view to contain zone name 'example.com'")
+	}
+}
+
+func TestEditModel_ViewRendersTypeReadOnly(t *testing.T) {
+	rec := newTestRecord()
+	m := NewEditModel(nil, "zone-1", "example.com", rec, 80, 24)
+	view := m.View()
+
+	if !strings.Contains(view, "read-only") {
+		t.Error("expected view to indicate type is read-only")
+	}
+}
+
+func TestEditModel_ViewRendersAllLabels(t *testing.T) {
+	rec := newTestRecord()
+	m := NewEditModel(nil, "zone-1", "example.com", rec, 80, 24)
+	view := m.View()
+
+	for _, label := range []string{"Type", "Name", "Content", "TTL", "Proxied"} {
+		if !strings.Contains(view, label) {
+			t.Errorf("expected view to contain label %q", label)
+		}
+	}
+}
+
+func TestEditModel_WindowSizeMsg(t *testing.T) {
+	rec := newTestRecord()
+	m := NewEditModel(nil, "zone-1", "example.com", rec, 80, 24)
+
+	m, _ = m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
+	if m.width != 120 || m.height != 40 {
+		t.Errorf("expected size 120x40, got %dx%d", m.width, m.height)
+	}
+}
