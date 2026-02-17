@@ -98,7 +98,7 @@ Deliverable: `go test ./...` passes; README has basic run instructions.
 
 ---
 
-## Step 9: Extend the API layer with update and record-ID support
+## Step 9: Extend the API layer with update and record-ID support ✅
 
 - Add an `ID` field to the `api.DNSRecord` struct so individual records can be targeted.
 - Populate `ID` from the Cloudflare SDK response in `ListDNSRecords`.
