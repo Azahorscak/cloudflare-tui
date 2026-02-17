@@ -15,6 +15,7 @@ import (
 
 func main() {
 	secret := flag.String("secret", "", "Kubernetes secret in namespace/secret-name format (required)")
+	secretKey := flag.String("secret-key", "cloudflare_api_token", "key within the Kubernetes secret that holds the Cloudflare API token")
 	kubeconfig := flag.String("kubeconfig", "", "path to kubeconfig file (optional, uses default context if omitted)")
 	flag.Parse()
 
@@ -26,7 +27,7 @@ func main() {
 
 	ctx := context.Background()
 
-	cfg, err := config.Load(ctx, *secret, *kubeconfig)
+	cfg, err := config.Load(ctx, *secret, *kubeconfig, *secretKey)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		os.Exit(1)

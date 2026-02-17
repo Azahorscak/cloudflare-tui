@@ -62,7 +62,8 @@ func buildKubeClient(kubeconfig string) (kubernetes.Interface, error) {
 //
 // secretFlag is the --secret flag value in "namespace/secret-name" format.
 // kubeconfig is an optional path to a kubeconfig file (empty uses the default).
-func Load(ctx context.Context, secretFlag string, kubeconfig string) (*Config, error) {
+// secretKey is the key within the secret that holds the API token.
+func Load(ctx context.Context, secretFlag string, kubeconfig string, secretKey string) (*Config, error) {
 	ref, err := parseSecretRef(secretFlag)
 	if err != nil {
 		return nil, err
@@ -73,25 +74,25 @@ func Load(ctx context.Context, secretFlag string, kubeconfig string) (*Config, e
 		return nil, err
 	}
 
-	return loadFromClient(ctx, client, ref)
+	return loadFromClient(ctx, client, ref, secretKey)
 }
 
 // loadFromClient fetches the secret using the provided Kubernetes client.
 // Separated from Load to allow testing with a fake clientset.
-func loadFromClient(ctx context.Context, client kubernetes.Interface, ref secretRef) (*Config, error) {
+func loadFromClient(ctx context.Context, client kubernetes.Interface, ref secretRef, secretKey string) (*Config, error) {
 	secret, err := client.CoreV1().Secrets(ref.Namespace).Get(ctx, ref.Name, metav1.GetOptions{})
 	if err != nil {
 		return nil, fmt.Errorf("fetching secret %s/%s: %w", ref.Namespace, ref.Name, err)
 	}
 
-	token, ok := secret.Data["cloudflare_api_token"]
+	token, ok := secret.Data[secretKey]
 	if !ok {
-		return nil, fmt.Errorf("secret %s/%s does not contain key \"cloudflare_api_token\"", ref.Namespace, ref.Name)
+		return nil, fmt.Errorf("secret %s/%s does not contain key %q", ref.Namespace, ref.Name, secretKey)
 	}
 
 	tokenStr := strings.TrimSpace(string(token))
 	if tokenStr == "" {
-		return nil, fmt.Errorf("secret %s/%s has an empty \"cloudflare_api_token\" value", ref.Namespace, ref.Name)
+		return nil, fmt.Errorf("secret %s/%s has an empty %q value", ref.Namespace, ref.Name, secretKey)
 	}
 
 	return &Config{APIToken: tokenStr}, nil
