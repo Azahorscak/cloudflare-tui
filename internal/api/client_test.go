@@ -167,9 +167,9 @@ func TestListDNSRecords(t *testing.T) {
 	}
 
 	want := []DNSRecord{
-		{Type: "A", Name: "example.com", Content: "192.0.2.1", TTL: 300, Proxied: true},
-		{Type: "CNAME", Name: "www.example.com", Content: "example.com", TTL: 1, Proxied: false},
-		{Type: "MX", Name: "example.com", Content: "mail.example.com", TTL: 3600, Proxied: false},
+		{ID: "rec-1", Type: "A", Name: "example.com", Content: "192.0.2.1", TTL: 300, Proxied: true},
+		{ID: "rec-2", Type: "CNAME", Name: "www.example.com", Content: "example.com", TTL: 1, Proxied: false},
+		{ID: "rec-3", Type: "MX", Name: "example.com", Content: "mail.example.com", TTL: 3600, Proxied: false},
 	}
 	for i, r := range records {
 		if r != want[i] {
@@ -234,6 +234,176 @@ func TestListDNSRecordsNetworkFailure(t *testing.T) {
 	_, err := client.ListDNSRecords(context.Background(), "zone-1")
 	if err == nil {
 		t.Fatal("expected error from ListDNSRecords with closed server, got nil")
+	}
+}
+
+func TestGetDNSRecord(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/zones/zone-1/dns_records/rec-1", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			http.NotFound(w, r)
+			return
+		}
+		if got := r.Header.Get("Authorization"); got != "Bearer test-token" {
+			t.Errorf("unexpected Authorization header: %s", got)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `{
+			"success": true,
+			"errors": [],
+			"messages": [],
+			"result": {
+				"id": "rec-1",
+				"type": "A",
+				"name": "example.com",
+				"content": "192.0.2.1",
+				"ttl": 300,
+				"proxied": true,
+				"proxiable": true
+			}
+		}`)
+	})
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	client := newTestClient(t, srv.URL)
+	record, err := client.GetDNSRecord(context.Background(), "zone-1", "rec-1")
+	if err != nil {
+		t.Fatalf("GetDNSRecord returned error: %v", err)
+	}
+
+	want := DNSRecord{
+		ID:      "rec-1",
+		Type:    "A",
+		Name:    "example.com",
+		Content: "192.0.2.1",
+		TTL:     300,
+		Proxied: true,
+	}
+	if record != want {
+		t.Errorf("GetDNSRecord = %+v, want %+v", record, want)
+	}
+}
+
+func TestGetDNSRecordError(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/zones/zone-1/dns_records/bad-id", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusNotFound)
+		fmt.Fprint(w, `{"success":false,"errors":[{"code":7003,"message":"Could not route to /zones/zone-1/dns_records/bad-id, perhaps your object identifier is invalid?"}],"messages":[],"result":null}`)
+	})
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	client := newTestClient(t, srv.URL)
+	_, err := client.GetDNSRecord(context.Background(), "zone-1", "bad-id")
+	if err == nil {
+		t.Fatal("expected error from GetDNSRecord, got nil")
+	}
+}
+
+func TestGetDNSRecordNetworkFailure(t *testing.T) {
+	srv := httptest.NewServer(http.NewServeMux())
+	srv.Close()
+
+	client := newTestClient(t, srv.URL)
+	_, err := client.GetDNSRecord(context.Background(), "zone-1", "rec-1")
+	if err == nil {
+		t.Fatal("expected error from GetDNSRecord with closed server, got nil")
+	}
+}
+
+func TestUpdateDNSRecord(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/zones/zone-1/dns_records/rec-1", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPut {
+			http.NotFound(w, r)
+			return
+		}
+		if got := r.Header.Get("Authorization"); got != "Bearer test-token" {
+			t.Errorf("unexpected Authorization header: %s", got)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `{
+			"success": true,
+			"errors": [],
+			"messages": [],
+			"result": {
+				"id": "rec-1",
+				"type": "A",
+				"name": "example.com",
+				"content": "203.0.113.50",
+				"ttl": 600,
+				"proxied": false,
+				"proxiable": true
+			}
+		}`)
+	})
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	client := newTestClient(t, srv.URL)
+	record, err := client.UpdateDNSRecord(context.Background(), "zone-1", "rec-1", UpdateDNSRecordParams{
+		Name:    "example.com",
+		Type:    "A",
+		Content: "203.0.113.50",
+		TTL:     600,
+		Proxied: false,
+	})
+	if err != nil {
+		t.Fatalf("UpdateDNSRecord returned error: %v", err)
+	}
+
+	want := DNSRecord{
+		ID:      "rec-1",
+		Type:    "A",
+		Name:    "example.com",
+		Content: "203.0.113.50",
+		TTL:     600,
+		Proxied: false,
+	}
+	if record != want {
+		t.Errorf("UpdateDNSRecord = %+v, want %+v", record, want)
+	}
+}
+
+func TestUpdateDNSRecordError(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/zones/zone-1/dns_records/rec-1", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusForbidden)
+		fmt.Fprint(w, `{"success":false,"errors":[{"code":9109,"message":"Invalid access token"}],"messages":[],"result":null}`)
+	})
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	client := newTestClient(t, srv.URL)
+	_, err := client.UpdateDNSRecord(context.Background(), "zone-1", "rec-1", UpdateDNSRecordParams{
+		Name:    "example.com",
+		Type:    "A",
+		Content: "203.0.113.50",
+		TTL:     600,
+		Proxied: false,
+	})
+	if err == nil {
+		t.Fatal("expected error from UpdateDNSRecord, got nil")
+	}
+}
+
+func TestUpdateDNSRecordNetworkFailure(t *testing.T) {
+	srv := httptest.NewServer(http.NewServeMux())
+	srv.Close()
+
+	client := newTestClient(t, srv.URL)
+	_, err := client.UpdateDNSRecord(context.Background(), "zone-1", "rec-1", UpdateDNSRecordParams{
+		Name:    "example.com",
+		Type:    "A",
+		Content: "203.0.113.50",
+		TTL:     600,
+		Proxied: false,
+	})
+	if err == nil {
+		t.Fatal("expected error from UpdateDNSRecord with closed server, got nil")
 	}
 }
 

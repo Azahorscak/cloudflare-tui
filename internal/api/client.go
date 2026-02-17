@@ -26,8 +26,18 @@ type Zone struct {
 
 // DNSRecord represents a single DNS record.
 type DNSRecord struct {
+	ID      string
 	Type    string
 	Name    string
+	Content string
+	TTL     int
+	Proxied bool
+}
+
+// UpdateDNSRecordParams contains the editable fields for updating a DNS record.
+type UpdateDNSRecordParams struct {
+	Name    string
+	Type    string
 	Content string
 	TTL     int
 	Proxied bool
@@ -74,6 +84,7 @@ func (c *Client) ListDNSRecords(ctx context.Context, zoneID string) ([]DNSRecord
 	for pager.Next() {
 		r := pager.Current()
 		result = append(result, DNSRecord{
+			ID:      r.ID,
 			Type:    string(r.Type),
 			Name:    r.Name,
 			Content: r.Content,
@@ -86,4 +97,49 @@ func (c *Client) ListDNSRecords(ctx context.Context, zoneID string) ([]DNSRecord
 	}
 
 	return result, nil
+}
+
+// GetDNSRecord fetches a single DNS record by ID.
+func (c *Client) GetDNSRecord(ctx context.Context, zoneID, recordID string) (DNSRecord, error) {
+	resp, err := c.cf.DNS.Records.Get(ctx, recordID, dns.RecordGetParams{
+		ZoneID: cloudflare.F(zoneID),
+	})
+	if err != nil {
+		return DNSRecord{}, fmt.Errorf("getting DNS record %s in zone %s: %w", recordID, zoneID, err)
+	}
+
+	return DNSRecord{
+		ID:      resp.ID,
+		Type:    string(resp.Type),
+		Name:    resp.Name,
+		Content: resp.Content,
+		TTL:     int(resp.TTL),
+		Proxied: resp.Proxied,
+	}, nil
+}
+
+// UpdateDNSRecord updates a DNS record and returns the updated record.
+func (c *Client) UpdateDNSRecord(ctx context.Context, zoneID, recordID string, params UpdateDNSRecordParams) (DNSRecord, error) {
+	resp, err := c.cf.DNS.Records.Update(ctx, recordID, dns.RecordUpdateParams{
+		ZoneID: cloudflare.F(zoneID),
+		Body: dns.RecordUpdateParamsBody{
+			Name:    cloudflare.F(params.Name),
+			Type:    cloudflare.F(dns.RecordUpdateParamsBodyType(params.Type)),
+			Content: cloudflare.F(params.Content),
+			TTL:     cloudflare.F(dns.TTL(params.TTL)),
+			Proxied: cloudflare.F(params.Proxied),
+		},
+	})
+	if err != nil {
+		return DNSRecord{}, fmt.Errorf("updating DNS record %s in zone %s: %w", recordID, zoneID, err)
+	}
+
+	return DNSRecord{
+		ID:      resp.ID,
+		Type:    string(resp.Type),
+		Name:    resp.Name,
+		Content: resp.Content,
+		TTL:     int(resp.TTL),
+		Proxied: resp.Proxied,
+	}, nil
 }
