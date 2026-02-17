@@ -68,8 +68,8 @@ func (m RecordsModel) fetchRecords() tea.Cmd {
 func (m RecordsModel) buildTable(records []api.DNSRecord) table.Model {
 	columns := []table.Column{
 		{Title: "Type", Width: 8},
-		{Title: "Name", Width: 30},
-		{Title: "Content", Width: 30},
+		{Title: "Name", Width: 64},
+		{Title: "Content", Width: 64},
 		{Title: "TTL", Width: 8},
 		{Title: "Proxied", Width: 8},
 	}
