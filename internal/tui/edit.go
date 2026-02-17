@@ -1,10 +1,13 @@
 package tui
 
 import (
+	"context"
 	"fmt"
 	"strconv"
 	"strings"
+	"time"
 
+	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -35,6 +38,17 @@ type submitEditMsg struct {
 	params   api.UpdateDNSRecordParams
 }
 
+// saveResultMsg carries the result of the API update call.
+type saveResultMsg struct {
+	record api.DNSRecord
+	err    error
+}
+
+// editDoneMsg signals that a record was saved successfully.
+type editDoneMsg struct {
+	record api.DNSRecord
+}
+
 // EditModel represents a form for editing a single DNS record.
 type EditModel struct {
 	client   *api.Client
@@ -49,6 +63,9 @@ type EditModel struct {
 
 	focused editField
 	errors  map[editField]string
+	saving  bool
+	saveErr error
+	spinner spinner.Model
 	width   int
 	height  int
 }
@@ -78,6 +95,10 @@ func NewEditModel(client *api.Client, zoneID, zoneName string, record api.DNSRec
 	ttlInput.CharLimit = 10
 	ttlInput.Width = 20
 
+	sp := spinner.New()
+	sp.Spinner = spinner.Dot
+	sp.Style = lipgloss.NewStyle().Foreground(lipgloss.Color("205"))
+
 	return EditModel{
 		client:       client,
 		zoneID:       zoneID,
@@ -89,6 +110,7 @@ func NewEditModel(client *api.Client, zoneID, zoneName string, record api.DNSRec
 		proxied:      record.Proxied,
 		focused:      fieldName,
 		errors:       make(map[editField]string),
+		spinner:      sp,
 		width:        width,
 		height:       height,
 	}
@@ -107,7 +129,34 @@ func (m EditModel) Update(msg tea.Msg) (EditModel, tea.Cmd) {
 		m.height = msg.Height
 		return m, nil
 
+	case submitEditMsg:
+		m.saving = true
+		m.saveErr = nil
+		return m, tea.Batch(m.spinner.Tick, m.saveCmd(msg))
+
+	case saveResultMsg:
+		m.saving = false
+		if msg.err != nil {
+			m.saveErr = msg.err
+			return m, nil
+		}
+		record := msg.record
+		return m, func() tea.Msg { return editDoneMsg{record: record} }
+
+	case spinner.TickMsg:
+		if m.saving {
+			var cmd tea.Cmd
+			m.spinner, cmd = m.spinner.Update(msg)
+			return m, cmd
+		}
+		return m, nil
+
 	case tea.KeyMsg:
+		// Block all key input while saving.
+		if m.saving {
+			return m, nil
+		}
+
 		switch msg.String() {
 		case "tab":
 			m.focused = (m.focused + 1) % editFieldCount
@@ -191,6 +240,20 @@ func (m EditModel) submitCmd() tea.Cmd {
 				Proxied: m.proxied,
 			},
 		}
+	}
+}
+
+// saveCmd fires the API update call and returns a saveResultMsg.
+func (m EditModel) saveCmd(msg submitEditMsg) tea.Cmd {
+	client := m.client
+	zoneID := msg.zoneID
+	recordID := msg.recordID
+	params := msg.params
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		record, err := client.UpdateDNSRecord(ctx, zoneID, recordID, params)
+		return saveResultMsg{record: record, err: err}
 	}
 }
 
@@ -317,12 +380,20 @@ func (m EditModel) View() string {
 		proxiedStyle.Render(proxiedValue),
 	)
 
-	// Submit button
-	submitText := "[ Save ]"
-	if m.focused == fieldSubmit {
-		submitText = focusedSubmitStyle.Render(submitText)
+	apiErrorStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("196")).
+		Bold(true).
+		Padding(0, 0, 0, 2)
+
+	// Submit button / saving indicator
+	var submitText string
+	if m.saving {
+		savingStyle := lipgloss.NewStyle().Padding(0, 0, 0, 2)
+		submitText = savingStyle.Render(m.spinner.View() + " Saving…")
+	} else if m.focused == fieldSubmit {
+		submitText = focusedSubmitStyle.Render("[ Save ]")
 	} else {
-		submitText = submitStyle.Render(submitText)
+		submitText = submitStyle.Render("[ Save ]")
 	}
 
 	help := helpStyle.Render("Tab/Shift+Tab: navigate | Enter: save | Esc: cancel")
@@ -345,7 +416,14 @@ func (m EditModel) View() string {
 		sections = append(sections, errorStyle.Render("! "+err))
 	}
 
-	sections = append(sections, proxiedRow, "", submitText, help)
+	sections = append(sections, proxiedRow, "", submitText)
+
+	// Show API error prominently above help text
+	if m.saveErr != nil {
+		sections = append(sections, apiErrorStyle.Render("Error: "+m.saveErr.Error()))
+	}
+
+	sections = append(sections, help)
 
 	return lipgloss.JoinVertical(lipgloss.Left, sections...)
 }
@@ -378,4 +456,14 @@ func (m EditModel) TTLValue() string {
 // Errors returns the current validation errors.
 func (m EditModel) Errors() map[editField]string {
 	return m.errors
+}
+
+// Saving returns whether a save is in progress.
+func (m EditModel) Saving() bool {
+	return m.saving
+}
+
+// SaveErr returns the last API save error, if any.
+func (m EditModel) SaveErr() error {
+	return m.saveErr
 }

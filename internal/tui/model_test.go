@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
@@ -685,5 +686,246 @@ func TestEditModel_ViewRendersUpdatedHelpText(t *testing.T) {
 	}
 	if !strings.Contains(view, "Esc: cancel") {
 		t.Error("expected help text to contain 'Esc: cancel'")
+	}
+}
+
+// --- Step 12 tests: save action and success/error feedback ---
+
+func TestEditModel_SubmitEditMsgSetsSavingState(t *testing.T) {
+	rec := newTestRecord()
+	m := NewEditModel(nil, "zone-1", "example.com", rec, 80, 24)
+
+	// Directly send submitEditMsg to simulate the runtime delivering it
+	m, cmd := m.Update(submitEditMsg{
+		zoneID:   "zone-1",
+		recordID: "rec-1",
+		params: api.UpdateDNSRecordParams{
+			Name:    "example.com",
+			Type:    "A",
+			Content: "192.0.2.1",
+			TTL:     300,
+			Proxied: true,
+		},
+	})
+
+	if !m.Saving() {
+		t.Error("expected saving to be true after submitEditMsg")
+	}
+	if cmd == nil {
+		t.Error("expected command (spinner tick + save cmd) after submitEditMsg")
+	}
+}
+
+func TestEditModel_SubmitEditMsgClearsPreviousSaveErr(t *testing.T) {
+	rec := newTestRecord()
+	m := NewEditModel(nil, "zone-1", "example.com", rec, 80, 24)
+
+	// Simulate a previous save error
+	m, _ = m.Update(saveResultMsg{err: fmt.Errorf("previous error")})
+	if m.SaveErr() == nil {
+		t.Fatal("expected saveErr to be set")
+	}
+
+	// Now submit again
+	m, _ = m.Update(submitEditMsg{
+		zoneID:   "zone-1",
+		recordID: "rec-1",
+		params:   api.UpdateDNSRecordParams{Name: "example.com", Type: "A", Content: "192.0.2.1", TTL: 300, Proxied: true},
+	})
+
+	if m.SaveErr() != nil {
+		t.Error("expected saveErr to be cleared on new submit")
+	}
+}
+
+func TestEditModel_SaveResultSuccess(t *testing.T) {
+	rec := newTestRecord()
+	m := NewEditModel(nil, "zone-1", "example.com", rec, 80, 24)
+	m.saving = true
+
+	updatedRecord := api.DNSRecord{
+		ID:      "rec-1",
+		Type:    "A",
+		Name:    "example.com",
+		Content: "192.0.2.99",
+		TTL:     300,
+		Proxied: true,
+	}
+
+	m, cmd := m.Update(saveResultMsg{record: updatedRecord})
+
+	if m.Saving() {
+		t.Error("expected saving to be false after successful save")
+	}
+	if m.SaveErr() != nil {
+		t.Errorf("expected no save error, got %v", m.SaveErr())
+	}
+	if cmd == nil {
+		t.Fatal("expected command (editDoneMsg) after successful save")
+	}
+
+	// Execute the command and check it produces editDoneMsg
+	msg := cmd()
+	done, ok := msg.(editDoneMsg)
+	if !ok {
+		t.Fatalf("expected editDoneMsg, got %T", msg)
+	}
+	if done.record.Content != "192.0.2.99" {
+		t.Errorf("expected updated content '192.0.2.99', got %q", done.record.Content)
+	}
+}
+
+func TestEditModel_SaveResultError(t *testing.T) {
+	rec := newTestRecord()
+	m := NewEditModel(nil, "zone-1", "example.com", rec, 80, 24)
+	m.saving = true
+
+	m, cmd := m.Update(saveResultMsg{err: fmt.Errorf("API rate limit exceeded")})
+
+	if m.Saving() {
+		t.Error("expected saving to be false after save error")
+	}
+	if m.SaveErr() == nil {
+		t.Fatal("expected save error to be set")
+	}
+	if m.SaveErr().Error() != "API rate limit exceeded" {
+		t.Errorf("expected error 'API rate limit exceeded', got %q", m.SaveErr().Error())
+	}
+	if cmd != nil {
+		t.Error("expected no command after save error")
+	}
+}
+
+func TestEditModel_SavingBlocksKeyInput(t *testing.T) {
+	rec := newTestRecord()
+	m := NewEditModel(nil, "zone-1", "example.com", rec, 80, 24)
+	m.saving = true
+
+	// Tab should be blocked
+	m, cmd := m.Update(tea.KeyMsg{Type: tea.KeyTab})
+	if m.Focused() != fieldName {
+		t.Errorf("expected focus to remain on fieldName while saving, got %d", m.Focused())
+	}
+	if cmd != nil {
+		t.Error("expected no command from blocked key input")
+	}
+
+	// Esc should be blocked
+	_, cmd = m.Update(tea.KeyMsg{Type: tea.KeyEscape})
+	if cmd != nil {
+		msg := cmd()
+		if _, ok := msg.(cancelEditMsg); ok {
+			t.Error("esc should not produce cancelEditMsg while saving")
+		}
+	}
+
+	// Enter should be blocked
+	m.focused = fieldSubmit
+	m2, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	if cmd != nil {
+		t.Error("expected no command from enter while saving")
+	}
+	_ = m2
+}
+
+func TestEditModel_ViewRendersSavingIndicator(t *testing.T) {
+	rec := newTestRecord()
+	m := NewEditModel(nil, "zone-1", "example.com", rec, 80, 24)
+	m.saving = true
+
+	view := m.View()
+	if !strings.Contains(view, "Saving") {
+		t.Error("expected view to contain 'Saving' indicator while saving")
+	}
+}
+
+func TestEditModel_ViewRendersAPIError(t *testing.T) {
+	rec := newTestRecord()
+	m := NewEditModel(nil, "zone-1", "example.com", rec, 80, 24)
+	m.saveErr = fmt.Errorf("authentication failed")
+
+	view := m.View()
+	if !strings.Contains(view, "Error:") {
+		t.Error("expected view to contain 'Error:' prefix for API error")
+	}
+	if !strings.Contains(view, "authentication failed") {
+		t.Error("expected view to contain the API error message")
+	}
+}
+
+func TestEditModel_ViewNoAPIErrorWhenNil(t *testing.T) {
+	rec := newTestRecord()
+	m := NewEditModel(nil, "zone-1", "example.com", rec, 80, 24)
+
+	view := m.View()
+	if strings.Contains(view, "Error:") {
+		t.Error("expected no API error in view when saveErr is nil")
+	}
+}
+
+func TestEditModel_SaveErrorRetryFlow(t *testing.T) {
+	rec := newTestRecord()
+	m := NewEditModel(nil, "zone-1", "example.com", rec, 80, 24)
+
+	// Simulate save error
+	m.saving = true
+	m, _ = m.Update(saveResultMsg{err: fmt.Errorf("server error")})
+	if m.SaveErr() == nil {
+		t.Fatal("expected save error to be set")
+	}
+
+	// User should be able to navigate to submit and retry
+	// (not saving, so keys work)
+	for i := 0; i < 4; i++ {
+		m, _ = m.Update(tea.KeyMsg{Type: tea.KeyTab})
+	}
+	if m.Focused() != fieldSubmit {
+		t.Fatalf("expected focus on fieldSubmit, got %d", m.Focused())
+	}
+
+	// Press Enter to retry submit
+	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	if cmd == nil {
+		t.Fatal("expected command from retry submit")
+	}
+	msg := cmd()
+	if _, ok := msg.(submitEditMsg); !ok {
+		t.Errorf("expected submitEditMsg on retry, got %T", msg)
+	}
+}
+
+func TestEditModel_SavingAccessorDefaultFalse(t *testing.T) {
+	rec := newTestRecord()
+	m := NewEditModel(nil, "zone-1", "example.com", rec, 80, 24)
+
+	if m.Saving() {
+		t.Error("expected saving to be false initially")
+	}
+}
+
+func TestEditModel_SaveErrAccessorDefaultNil(t *testing.T) {
+	rec := newTestRecord()
+	m := NewEditModel(nil, "zone-1", "example.com", rec, 80, 24)
+
+	if m.SaveErr() != nil {
+		t.Error("expected saveErr to be nil initially")
+	}
+}
+
+func TestEditModel_ViewSavingHidesSubmitButton(t *testing.T) {
+	rec := newTestRecord()
+	m := NewEditModel(nil, "zone-1", "example.com", rec, 80, 24)
+
+	// When not saving, should show Save button
+	view := m.View()
+	if !strings.Contains(view, "Save") {
+		t.Error("expected Save button in normal view")
+	}
+
+	// When saving, should show Saving indicator instead
+	m.saving = true
+	view = m.View()
+	if !strings.Contains(view, "Saving") {
+		t.Error("expected Saving indicator in saving view")
 	}
 }
