@@ -18,9 +18,9 @@ type zoneItem struct {
 	zone api.Zone
 }
 
-func (z zoneItem) Title() string       { return z.zone.Name }
-func (z zoneItem) Description() string { return z.zone.ID }
-func (z zoneItem) FilterValue() string { return z.zone.Name }
+func (z zoneItem) Title() string       { return sanitize(z.zone.Name) }
+func (z zoneItem) Description() string { return sanitize(z.zone.ID) }
+func (z zoneItem) FilterValue() string { return sanitize(z.zone.Name) }
 
 // zonesLoadedMsg carries the result of loading zones from the API.
 type zonesLoadedMsg struct {

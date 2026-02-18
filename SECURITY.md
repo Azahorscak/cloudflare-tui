@@ -2,18 +2,20 @@
 
 ## Security Model
 
-cloudflare-tui is a **read-only** tool that lists Cloudflare DNS zones and records. It does not create, modify, or delete any resources.
+cloudflare-tui lists Cloudflare DNS zones and records and allows **editing** existing DNS records. It does not create or delete resources, but it does issue PUT requests to the Cloudflare API to update record values.
 
 Credentials are loaded exclusively from a Kubernetes secret at startup. The API token is held in memory for the lifetime of the process and is never written to disk, logged, or transmitted to any destination other than the Cloudflare API.
 
 ## Cloudflare API Token Scoping
 
-Follow the principle of least privilege when creating the API token stored in your Kubernetes secret. The application only needs:
+Follow the principle of least privilege when creating the API token stored in your Kubernetes secret. The application requires:
 
-| Permission | Access Level |
+| Permission   | Access Level |
 |---|---|
-| Zone / Zone | Read |
-| Zone / DNS  | Read |
+| Zone / Zone  | Read         |
+| Zone / DNS   | Edit         |
+
+`Zone / DNS Edit` is required because the application can update existing DNS records. If you only need read-only inspection and do not require the edit feature, scope the token to `Zone / DNS Read` instead and the edit form will return an API error when a save is attempted.
 
 To create a properly scoped token:
 
@@ -21,8 +23,8 @@ To create a properly scoped token:
 2. Click **Create Token**.
 3. Use the **Custom token** template.
 4. Add only the two permissions above.
-5. Under **Zone Resources**, restrict to the specific zones the operator needs to inspect (or "All zones" if that's appropriate).
-6. Set a reasonable TTL if your workflow supports token rotation.
+5. Under **Zone Resources**, restrict to the specific zones the operator needs to manage (or "All zones" if that's appropriate).
+6. Set a reasonable TTL and enable token rotation if your workflow supports it.
 
 **Do not** use a Global API Key. It grants full account access and cannot be scoped.
 
