@@ -13,6 +13,7 @@ type View int
 const (
 	ViewZones   View = iota
 	ViewRecords
+	ViewEdit
 )
 
 // selectZoneMsg signals a transition from zones to the records view.
@@ -29,6 +30,7 @@ type Model struct {
 	client      *api.Client
 	zones       ZonesModel
 	records     RecordsModel
+	edit        EditModel
 	width       int
 	height      int
 }
@@ -66,6 +68,19 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case backToZonesMsg:
 		m.currentView = ViewZones
 		return m, nil
+
+	case editRecordMsg:
+		m.currentView = ViewEdit
+		m.edit = NewEditModel(m.client, m.records.zone.ID, m.records.zone.Name, msg.record, m.width, m.height)
+		return m, m.edit.Init()
+
+	case cancelEditMsg:
+		m.currentView = ViewRecords
+		return m, nil
+
+	case editDoneMsg:
+		m.currentView = ViewRecords
+		return m, m.records.fetchRecords()
 	}
 
 	var cmd tea.Cmd
@@ -74,6 +89,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.zones, cmd = m.zones.Update(msg)
 	case ViewRecords:
 		m.records, cmd = m.records.Update(msg)
+	case ViewEdit:
+		m.edit, cmd = m.edit.Update(msg)
 	}
 	return m, cmd
 }
@@ -82,6 +99,8 @@ func (m Model) View() string {
 	switch m.currentView {
 	case ViewRecords:
 		return m.records.View()
+	case ViewEdit:
+		return m.edit.View()
 	default:
 		return m.zones.View()
 	}
