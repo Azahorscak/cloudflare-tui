@@ -90,7 +90,7 @@ func (m RecordsModel) buildTable(records []api.DNSRecord) table.Model {
 		if r.TTL == 1 {
 			ttl = "Auto"
 		}
-		rows[i] = table.Row{r.Type, r.Name, r.Content, ttl, proxied}
+		rows[i] = table.Row{sanitize(r.Type), sanitize(r.Name), sanitize(r.Content), ttl, proxied}
 	}
 
 	h := m.height
@@ -174,7 +174,7 @@ func (m RecordsModel) Update(msg tea.Msg) (RecordsModel, tea.Cmd) {
 // View renders the records view.
 func (m RecordsModel) View() string {
 	if m.loading {
-		return fmt.Sprintf("\n  %s Loading DNS records for %s...\n", m.spinner.View(), m.zone.Name)
+		return fmt.Sprintf("\n  %s Loading DNS records for %s...\n", m.spinner.View(), sanitize(m.zone.Name))
 	}
 	if m.err != nil {
 		return fmt.Sprintf("\n  Error loading records: %v\n\n  Press q to go back.\n", m.err)
@@ -183,7 +183,7 @@ func (m RecordsModel) View() string {
 	header := lipgloss.NewStyle().
 		Bold(true).
 		Padding(0, 0, 1, 2).
-		Render(fmt.Sprintf("DNS Records - %s", m.zone.Name))
+		Render(fmt.Sprintf("DNS Records - %s", sanitize(m.zone.Name)))
 
 	help := lipgloss.NewStyle().
 		Faint(true).

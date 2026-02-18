@@ -322,13 +322,13 @@ func (m EditModel) View() string {
 		Padding(1, 0, 0, 2)
 
 	// Header
-	title := titleStyle.Render(fmt.Sprintf(" Edit %s Record ", m.record.Type))
-	subtitle := headerStyle.Render(fmt.Sprintf("%s  %s", title, m.zoneName))
+	title := titleStyle.Render(fmt.Sprintf(" Edit %s Record ", sanitize(m.record.Type)))
+	subtitle := headerStyle.Render(fmt.Sprintf("%s  %s", title, sanitize(m.zoneName)))
 
 	// Type (read-only)
 	typeRow := lipgloss.JoinHorizontal(lipgloss.Top,
 		labelStyle.Render("Type"),
-		readOnlyStyle.Render(m.record.Type+" (read-only)"),
+		readOnlyStyle.Render(sanitize(m.record.Type)+" (read-only)"),
 	)
 
 	// Name
