@@ -1,6 +1,8 @@
 module github.com/Azahorscak/cloudflare-tui
 
-go 1.24.7
+go 1.26.0
+
+toolchain go1.26.0
 
 require (
 	github.com/charmbracelet/bubbles v1.0.0
