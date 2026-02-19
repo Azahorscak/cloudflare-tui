@@ -6,7 +6,7 @@ A Go-based terminal UI for interacting with the Cloudflare API. The initial goal
 
 ## Tech Stack
 
-- **Language:** Go (1.22+)
+- **Language:** Go (1.26+)
 - **TUI framework:** [Bubble Tea](https://github.com/charmbracelet/bubbletea) with [Lip Gloss](https://github.com/charmbracelet/lipgloss) for styling and [Bubbles](https://github.com/charmbracelet/bubbles) for common components (tables, spinners, text input)
 - **Cloudflare SDK:** [cloudflare-go](https://github.com/cloudflare/cloudflare-go) (official Go library)
 - **Kubernetes:** [client-go](https://github.com/kubernetes/client-go) for reading secrets from a cluster
