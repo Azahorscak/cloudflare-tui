@@ -14,6 +14,9 @@ import (
 	"github.com/Azahorscak/cloudflare-tui/internal/api"
 )
 
+// statusClearMsg signals that the status message should be cleared.
+type statusClearMsg struct{}
+
 // recordsLoadedMsg carries the result of loading DNS records from the API.
 type recordsLoadedMsg struct {
 	records []api.DNSRecord
@@ -27,15 +30,16 @@ type editRecordMsg struct {
 
 // RecordsModel handles the DNS records table view.
 type RecordsModel struct {
-	client  *api.Client
-	zone    api.Zone
-	records []api.DNSRecord
-	table   table.Model
-	spinner spinner.Model
-	loading bool
-	err     error
-	width   int
-	height  int
+	client    *api.Client
+	zone      api.Zone
+	records   []api.DNSRecord
+	table     table.Model
+	spinner   spinner.Model
+	loading   bool
+	err       error
+	statusMsg string
+	width     int
+	height    int
 }
 
 // NewRecordsModel creates a new DNS records table model for the given zone.
@@ -149,6 +153,10 @@ func (m RecordsModel) Update(msg tea.Msg) (RecordsModel, tea.Cmd) {
 		m.table = m.buildTable(msg.records)
 		return m, nil
 
+	case statusClearMsg:
+		m.statusMsg = ""
+		return m, nil
+
 	case tea.KeyMsg:
 		key := msg.String()
 		if key == "q" || key == "esc" {
@@ -190,5 +198,23 @@ func (m RecordsModel) View() string {
 		Padding(1, 0, 0, 2).
 		Render("Enter: edit record | q/Esc: back | Ctrl+C: quit")
 
-	return header + "\n" + m.table.View() + "\n" + help
+	result := header + "\n" + m.table.View() + "\n"
+
+	if m.statusMsg != "" {
+		statusStyle := lipgloss.NewStyle().
+			Foreground(lipgloss.Color("42")).
+			Bold(true).
+			Padding(0, 0, 0, 2)
+		result += statusStyle.Render(m.statusMsg) + "\n"
+	}
+
+	result += help
+	return result
+}
+
+// clearStatusAfter returns a command that clears the status message after the given duration.
+func clearStatusAfter(d time.Duration) tea.Cmd {
+	return tea.Tick(d, func(time.Time) tea.Msg {
+		return statusClearMsg{}
+	})
 }

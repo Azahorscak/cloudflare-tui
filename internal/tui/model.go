@@ -2,6 +2,9 @@
 package tui
 
 import (
+	"fmt"
+	"time"
+
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/Azahorscak/cloudflare-tui/internal/api"
@@ -80,7 +83,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case editDoneMsg:
 		m.currentView = ViewRecords
-		return m, m.records.fetchRecords()
+		m.records.statusMsg = fmt.Sprintf("Record %q saved successfully", msg.record.Name)
+		return m, tea.Batch(m.records.fetchRecords(), clearStatusAfter(5*time.Second))
 	}
 
 	var cmd tea.Cmd
