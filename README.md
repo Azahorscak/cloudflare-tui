@@ -1,6 +1,6 @@
 # cloudflare-tui
 
-A terminal UI for browsing Cloudflare DNS records, powered by credentials stored in a Kubernetes secret.
+A terminal UI for browsing and editing Cloudflare DNS records, powered by credentials stored in a Kubernetes secret.
 
 ## Prerequisites
 
@@ -35,7 +35,8 @@ The `--secret` flag is required and points to a Kubernetes secret in `namespace/
 ## Navigation
 
 - **Zone list**: use arrow keys to navigate, `/` to filter, `Enter` to select a zone
-- **DNS records table**: use arrow keys to scroll, `q` or `Esc` to go back
+- **DNS records table**: use arrow keys to scroll, `Enter` to edit a record, `q` or `Esc` to go back
+- **Edit form**: `Tab`/`Shift+Tab` to move between fields, `Space` to toggle proxied, `Enter` on Save to persist changes, `Esc` to cancel
 - `Ctrl+C` quits from any screen
 
 ## Architecture
@@ -49,6 +50,7 @@ internal/
     model.go           Root model, view routing
     zones.go           Zone selection list
     records.go         DNS record table
+    edit.go            DNS record edit form
 ```
 
 The TUI layer never imports the Cloudflare SDK directly. The API layer never imports Bubble Tea. Dependencies flow one way: `main -> config + api + tui`, `tui -> api`.
@@ -63,7 +65,7 @@ See [SECURITY.md](SECURITY.md) for the full security model, including:
 
 **Key points:**
 
-- The application is **read-only** — it never creates, modifies, or deletes resources.
+- The application can **edit** existing DNS records but never creates or deletes resources.
 - Credentials come exclusively from a Kubernetes secret. No env vars, no local files.
 - API calls enforce a 30-second timeout to prevent indefinite hangs.
 - The API token is held in memory only and is never logged or written to disk.

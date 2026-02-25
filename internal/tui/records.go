@@ -196,7 +196,7 @@ func (m RecordsModel) View() string {
 	help := lipgloss.NewStyle().
 		Faint(true).
 		Padding(1, 0, 0, 2).
-		Render("Enter: edit record | q/Esc: back | Ctrl+C: quit")
+		Render("↑/↓: navigate | Enter: edit record | q/Esc: back | Ctrl+C: quit")
 
 	result := header + "\n" + m.table.View() + "\n"
 
