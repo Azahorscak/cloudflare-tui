@@ -5,7 +5,7 @@
 Given a Cloudflare zone, display its DNS records in an interactive terminal table and allow selecting individual records to edit them in-place.
 
 ### Milestone 1 (Steps 1–8): List DNS records for a zone ✅
-### Milestone 2 (Steps 9–14): Select and edit a DNS record
+### Milestone 2 (Steps 9–14): Select and edit a DNS record ✅
 
 ---
 

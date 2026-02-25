@@ -48,6 +48,12 @@ func NewClient(cfg *config.Config) *Client {
 	return newClient(cfg)
 }
 
+// NewClientWithBaseURL creates a Client that targets a custom base URL.
+// Intended for integration tests using a mock HTTP server.
+func NewClientWithBaseURL(cfg *config.Config, baseURL string) *Client {
+	return newClient(cfg, option.WithBaseURL(baseURL), option.WithMaxRetries(0))
+}
+
 // newClient creates a Client with optional extra request options (used for testing).
 func newClient(cfg *config.Config, extra ...option.RequestOption) *Client {
 	opts := append([]option.RequestOption{option.WithAPIToken(cfg.APIToken)}, extra...)

@@ -2,12 +2,15 @@ package tui
 
 import (
 	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/Azahorscak/cloudflare-tui/internal/api"
+	"github.com/Azahorscak/cloudflare-tui/internal/config"
 )
 
 func TestNew_StartsAtZonesView(t *testing.T) {
@@ -687,6 +690,9 @@ func TestEditModel_ViewRendersUpdatedHelpText(t *testing.T) {
 	if !strings.Contains(view, "Esc: cancel") {
 		t.Error("expected help text to contain 'Esc: cancel'")
 	}
+	if !strings.Contains(view, "Space: toggle proxied") {
+		t.Error("expected help text to contain 'Space: toggle proxied'")
+	}
 }
 
 // --- Step 12 tests: save action and success/error feedback ---
@@ -1132,6 +1138,9 @@ func TestRecordsModel_HelpBarShowsEditHint(t *testing.T) {
 	if !strings.Contains(view, "Enter: edit record") {
 		t.Error("expected help bar to contain 'Enter: edit record'")
 	}
+	if !strings.Contains(view, "↑/↓: navigate") {
+		t.Error("expected help bar to contain '↑/↓: navigate'")
+	}
 }
 
 func TestModel_FullNavigationLoop(t *testing.T) {
@@ -1211,5 +1220,515 @@ func TestModel_FullEditSaveLoop(t *testing.T) {
 	}
 	if cmd == nil {
 		t.Error("expected batch command (fetch + clearStatus) after save")
+	}
+}
+
+// --- Step 14: edge case tests ---
+
+func TestEditModel_LongContentValue(t *testing.T) {
+	rec := newTestRecord()
+	rec.Content = strings.Repeat("a", 2000)
+	m := NewEditModel(nil, "zone-1", "example.com", rec, 80, 24)
+
+	if m.ContentValue() != rec.Content {
+		t.Errorf("expected content length %d, got %d", len(rec.Content), len(m.ContentValue()))
+	}
+
+	// Should render without error.
+	view := m.View()
+	if !strings.Contains(view, "Content") {
+		t.Error("expected view to render Content label for long content")
+	}
+
+	// Should validate and submit successfully.
+	for i := 0; i < 4; i++ {
+		m, _ = m.Update(tea.KeyMsg{Type: tea.KeyTab})
+	}
+	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	if cmd == nil {
+		t.Error("expected valid submission with long content")
+	}
+}
+
+func TestEditModel_TTLBoundaryMinNonAuto(t *testing.T) {
+	rec := newTestRecord()
+	rec.TTL = 2
+	m := NewEditModel(nil, "zone-1", "example.com", rec, 80, 24)
+
+	if m.TTLValue() != "2" {
+		t.Errorf("expected TTL '2', got %q", m.TTLValue())
+	}
+
+	for i := 0; i < 4; i++ {
+		m, _ = m.Update(tea.KeyMsg{Type: tea.KeyTab})
+	}
+	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	if cmd == nil {
+		t.Fatal("expected valid submission with TTL=2")
+	}
+	msg := cmd()
+	sub := msg.(submitEditMsg)
+	if sub.params.TTL != 2 {
+		t.Errorf("expected TTL 2, got %d", sub.params.TTL)
+	}
+}
+
+func TestEditModel_TTLBoundaryLargeValue(t *testing.T) {
+	rec := newTestRecord()
+	rec.TTL = 86400
+	m := NewEditModel(nil, "zone-1", "example.com", rec, 80, 24)
+
+	if m.TTLValue() != "86400" {
+		t.Errorf("expected TTL '86400', got %q", m.TTLValue())
+	}
+
+	for i := 0; i < 4; i++ {
+		m, _ = m.Update(tea.KeyMsg{Type: tea.KeyTab})
+	}
+	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	if cmd == nil {
+		t.Fatal("expected valid submission with TTL=86400")
+	}
+	msg := cmd()
+	sub := msg.(submitEditMsg)
+	if sub.params.TTL != 86400 {
+		t.Errorf("expected TTL 86400, got %d", sub.params.TTL)
+	}
+}
+
+func TestEditModel_TTLAutoLowerCase(t *testing.T) {
+	rec := newTestRecord()
+	m := NewEditModel(nil, "zone-1", "example.com", rec, 80, 24)
+	m.ttlInput.SetValue("auto")
+
+	for i := 0; i < 4; i++ {
+		m, _ = m.Update(tea.KeyMsg{Type: tea.KeyTab})
+	}
+	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	if cmd == nil {
+		t.Fatal("expected valid submission with 'auto' TTL")
+	}
+	msg := cmd()
+	sub := msg.(submitEditMsg)
+	if sub.params.TTL != 1 {
+		t.Errorf("expected TTL 1 for 'auto', got %d", sub.params.TTL)
+	}
+}
+
+func TestEditModel_TTLAutoMixedCase(t *testing.T) {
+	rec := newTestRecord()
+	m := NewEditModel(nil, "zone-1", "example.com", rec, 80, 24)
+	m.ttlInput.SetValue("AuTo")
+
+	for i := 0; i < 4; i++ {
+		m, _ = m.Update(tea.KeyMsg{Type: tea.KeyTab})
+	}
+	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	if cmd == nil {
+		t.Fatal("expected valid submission with 'AuTo' TTL")
+	}
+	msg := cmd()
+	sub := msg.(submitEditMsg)
+	if sub.params.TTL != 1 {
+		t.Errorf("expected TTL 1 for 'AuTo', got %d", sub.params.TTL)
+	}
+}
+
+func TestEditModel_ProxiedOnMXRecord(t *testing.T) {
+	rec := api.DNSRecord{
+		ID:      "rec-mx",
+		Type:    "MX",
+		Name:    "example.com",
+		Content: "mail.example.com",
+		TTL:     3600,
+		Proxied: false,
+	}
+	m := NewEditModel(nil, "zone-1", "example.com", rec, 80, 24)
+
+	// Navigate to proxied field.
+	for i := 0; i < 3; i++ {
+		m, _ = m.Update(tea.KeyMsg{Type: tea.KeyTab})
+	}
+	if m.Focused() != fieldProxied {
+		t.Fatalf("expected focus on fieldProxied, got %d", m.Focused())
+	}
+
+	// Toggle proxied on.
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{' '}})
+	if !m.Proxied() {
+		t.Error("expected proxied to toggle to true even for MX record")
+	}
+
+	// Submit should proceed (API would reject, but form allows it).
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyTab})
+	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	if cmd == nil {
+		t.Fatal("expected submission to proceed for MX record with proxied=true")
+	}
+	msg := cmd()
+	sub := msg.(submitEditMsg)
+	if sub.params.Type != "MX" {
+		t.Errorf("expected type MX, got %q", sub.params.Type)
+	}
+	if !sub.params.Proxied {
+		t.Error("expected proxied=true in submit params")
+	}
+}
+
+func TestEditModel_ProxiedOnTXTRecord(t *testing.T) {
+	rec := api.DNSRecord{
+		ID:      "rec-txt",
+		Type:    "TXT",
+		Name:    "example.com",
+		Content: "v=spf1 include:_spf.google.com ~all",
+		TTL:     3600,
+		Proxied: false,
+	}
+	m := NewEditModel(nil, "zone-1", "example.com", rec, 80, 24)
+
+	if m.Proxied() {
+		t.Error("expected proxied to start as false for TXT record")
+	}
+
+	view := m.View()
+	if !strings.Contains(view, "TXT") {
+		t.Error("expected view to contain 'TXT' record type")
+	}
+}
+
+func TestEditModel_ProxiedOnSRVRecord(t *testing.T) {
+	rec := api.DNSRecord{
+		ID:      "rec-srv",
+		Type:    "SRV",
+		Name:    "_sip._tcp.example.com",
+		Content: "10 60 5060 sip.example.com",
+		TTL:     3600,
+		Proxied: false,
+	}
+	m := NewEditModel(nil, "zone-1", "example.com", rec, 80, 24)
+
+	// Navigate to proxied and toggle.
+	for i := 0; i < 3; i++ {
+		m, _ = m.Update(tea.KeyMsg{Type: tea.KeyTab})
+	}
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{' '}})
+	if !m.Proxied() {
+		t.Error("expected proxied to toggle to true for SRV record")
+	}
+
+	// Submit includes the toggled value.
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyTab})
+	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	if cmd == nil {
+		t.Fatal("expected submission to proceed for SRV record")
+	}
+	msg := cmd()
+	sub := msg.(submitEditMsg)
+	if sub.params.Type != "SRV" {
+		t.Errorf("expected type SRV, got %q", sub.params.Type)
+	}
+}
+
+func TestEditModel_TTLValidationBoundary(t *testing.T) {
+	// TTL = 1 means Auto; values between 2 and the minimum Cloudflare
+	// allows should still pass local validation.
+	tests := []struct {
+		input string
+		valid bool
+		ttl   int
+	}{
+		{"Auto", true, 1},
+		{"auto", true, 1},
+		{"1", true, 1},
+		{"2", true, 2},
+		{"60", true, 60},
+		{"0", false, 0},
+		{"-1", false, 0},
+		{"abc", false, 0},
+		{"", false, 0},
+	}
+
+	for _, tt := range tests {
+		t.Run("ttl="+tt.input, func(t *testing.T) {
+			rec := newTestRecord()
+			m := NewEditModel(nil, "zone-1", "example.com", rec, 80, 24)
+			m.ttlInput.SetValue(tt.input)
+
+			for i := 0; i < 4; i++ {
+				m, _ = m.Update(tea.KeyMsg{Type: tea.KeyTab})
+			}
+			m, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+
+			if tt.valid {
+				if cmd == nil {
+					t.Errorf("expected valid submission for TTL %q", tt.input)
+					return
+				}
+				msg := cmd()
+				sub := msg.(submitEditMsg)
+				if sub.params.TTL != tt.ttl {
+					t.Errorf("expected TTL %d, got %d", tt.ttl, sub.params.TTL)
+				}
+			} else {
+				if cmd != nil {
+					t.Errorf("expected validation failure for TTL %q", tt.input)
+				}
+				errs := m.Errors()
+				if _, ok := errs[fieldTTL]; !ok {
+					t.Errorf("expected TTL validation error for %q", tt.input)
+				}
+			}
+		})
+	}
+}
+
+// --- Step 14: integration test with mocked API ---
+
+func TestEditFlow_IntegrationWithMockedAPI(t *testing.T) {
+	updateCalled := false
+	mux := http.NewServeMux()
+
+	// Handle record update.
+	mux.HandleFunc("/zones/zone-1/dns_records/rec-1", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPut {
+			updateCalled = true
+			w.Header().Set("Content-Type", "application/json")
+			fmt.Fprint(w, `{
+				"success": true,
+				"errors": [],
+				"messages": [],
+				"result": {
+					"id": "rec-1",
+					"type": "A",
+					"name": "example.com",
+					"content": "203.0.113.50",
+					"ttl": 300,
+					"proxied": true
+				}
+			}`)
+			return
+		}
+		http.NotFound(w, r)
+	})
+
+	// Handle record list (for the refresh after save).
+	mux.HandleFunc("/zones/zone-1/dns_records", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.URL.Query().Get("page") != "" && r.URL.Query().Get("page") != "1" {
+			fmt.Fprint(w, `{"success":true,"errors":[],"messages":[],"result":[],"result_info":{"page":2,"per_page":20,"total_count":1,"total_pages":1}}`)
+			return
+		}
+		fmt.Fprint(w, `{
+			"success": true,
+			"errors": [],
+			"messages": [],
+			"result": [{
+				"id": "rec-1",
+				"type": "A",
+				"name": "example.com",
+				"content": "203.0.113.50",
+				"ttl": 300,
+				"proxied": true
+			}],
+			"result_info": {"page": 1, "per_page": 20, "total_count": 1, "total_pages": 1}
+		}`)
+	})
+
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	cfg := &config.Config{APIToken: "test-token"}
+	client := api.NewClientWithBaseURL(cfg, srv.URL)
+	m := New(client)
+
+	// Step 1: start at zones.
+	if m.currentView != ViewZones {
+		t.Fatalf("expected ViewZones, got %d", m.currentView)
+	}
+
+	// Step 2: select zone → records.
+	zone := api.Zone{ID: "zone-1", Name: "example.com"}
+	updated, _ := m.Update(selectZoneMsg{zone: zone})
+	model := updated.(Model)
+	if model.currentView != ViewRecords {
+		t.Fatalf("expected ViewRecords, got %d", model.currentView)
+	}
+
+	// Step 3: select record → edit.
+	rec := api.DNSRecord{
+		ID: "rec-1", Type: "A", Name: "example.com",
+		Content: "192.0.2.1", TTL: 300, Proxied: true,
+	}
+	updated, _ = model.Update(editRecordMsg{record: rec})
+	model = updated.(Model)
+	if model.currentView != ViewEdit {
+		t.Fatalf("expected ViewEdit, got %d", model.currentView)
+	}
+
+	// Step 4: modify content.
+	model.edit.contentInput.SetValue("203.0.113.50")
+
+	// Step 5: navigate to submit and press enter.
+	for i := 0; i < 4; i++ {
+		model.edit, _ = model.edit.Update(tea.KeyMsg{Type: tea.KeyTab})
+	}
+	var cmd tea.Cmd
+	model.edit, cmd = model.edit.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	if cmd == nil {
+		t.Fatal("expected submit command")
+	}
+
+	// Step 6: execute submit command → submitEditMsg.
+	submitResult := cmd()
+	sub, ok := submitResult.(submitEditMsg)
+	if !ok {
+		t.Fatalf("expected submitEditMsg, got %T", submitResult)
+	}
+	if sub.params.Content != "203.0.113.50" {
+		t.Errorf("expected updated content '203.0.113.50', got %q", sub.params.Content)
+	}
+
+	// Step 7: deliver submitEditMsg → triggers API call.
+	model.edit, cmd = model.edit.Update(sub)
+	if !model.edit.Saving() {
+		t.Error("expected saving state")
+	}
+	if cmd == nil {
+		t.Fatal("expected batch command from submitEditMsg")
+	}
+
+	// Step 8: execute the batch to find the saveResultMsg.
+	batchResult := cmd()
+	batch, ok := batchResult.(tea.BatchMsg)
+	if !ok {
+		t.Fatalf("expected tea.BatchMsg, got %T", batchResult)
+	}
+
+	var saveResult saveResultMsg
+	foundSaveResult := false
+	for _, c := range batch {
+		msg := c()
+		if sr, ok := msg.(saveResultMsg); ok {
+			saveResult = sr
+			foundSaveResult = true
+		}
+	}
+	if !foundSaveResult {
+		t.Fatal("expected saveResultMsg from batch commands")
+	}
+	if saveResult.err != nil {
+		t.Fatalf("expected no save error, got %v", saveResult.err)
+	}
+	if saveResult.record.Content != "203.0.113.50" {
+		t.Errorf("expected updated content '203.0.113.50', got %q", saveResult.record.Content)
+	}
+
+	// Step 9: deliver save result → editDoneMsg.
+	model.edit, cmd = model.edit.Update(saveResult)
+	if model.edit.Saving() {
+		t.Error("expected saving to be false after successful save")
+	}
+	if cmd == nil {
+		t.Fatal("expected editDoneMsg command")
+	}
+
+	doneResult := cmd()
+	done, ok := doneResult.(editDoneMsg)
+	if !ok {
+		t.Fatalf("expected editDoneMsg, got %T", doneResult)
+	}
+	if done.record.Content != "203.0.113.50" {
+		t.Errorf("expected updated content in editDoneMsg, got %q", done.record.Content)
+	}
+
+	// Step 10: deliver editDoneMsg → back to records with status.
+	updated, cmd = model.Update(done)
+	model = updated.(Model)
+	if model.currentView != ViewRecords {
+		t.Errorf("expected ViewRecords after editDoneMsg, got %d", model.currentView)
+	}
+	if !strings.Contains(model.records.statusMsg, "saved successfully") {
+		t.Errorf("expected status message to contain 'saved successfully', got %q", model.records.statusMsg)
+	}
+	if cmd == nil {
+		t.Error("expected batch command (fetchRecords + clearStatus)")
+	}
+
+	if !updateCalled {
+		t.Error("expected API update endpoint to be called")
+	}
+}
+
+func TestEditFlow_IntegrationAPIError(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/zones/zone-1/dns_records/rec-1", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusForbidden)
+		fmt.Fprint(w, `{"success":false,"errors":[{"code":9109,"message":"Invalid access token"}],"messages":[],"result":null}`)
+	})
+
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	cfg := &config.Config{APIToken: "bad-token"}
+	client := api.NewClientWithBaseURL(cfg, srv.URL)
+	m := New(client)
+
+	// Navigate to edit.
+	zone := api.Zone{ID: "zone-1", Name: "example.com"}
+	updated, _ := m.Update(selectZoneMsg{zone: zone})
+	model := updated.(Model)
+
+	rec := api.DNSRecord{
+		ID: "rec-1", Type: "A", Name: "example.com",
+		Content: "192.0.2.1", TTL: 300, Proxied: true,
+	}
+	updated, _ = model.Update(editRecordMsg{record: rec})
+	model = updated.(Model)
+
+	// Submit the form.
+	for i := 0; i < 4; i++ {
+		model.edit, _ = model.edit.Update(tea.KeyMsg{Type: tea.KeyTab})
+	}
+	var cmd tea.Cmd
+	model.edit, cmd = model.edit.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	submitResult := cmd()
+	sub := submitResult.(submitEditMsg)
+
+	// Deliver submitEditMsg → triggers API call.
+	model.edit, cmd = model.edit.Update(sub)
+
+	// Execute batch to find saveResultMsg.
+	batchResult := cmd()
+	batch := batchResult.(tea.BatchMsg)
+
+	var saveResult saveResultMsg
+	for _, c := range batch {
+		msg := c()
+		if sr, ok := msg.(saveResultMsg); ok {
+			saveResult = sr
+		}
+	}
+
+	if saveResult.err == nil {
+		t.Fatal("expected API error in save result")
+	}
+
+	// Deliver error result → stays on edit form.
+	model.edit, cmd = model.edit.Update(saveResult)
+	if model.edit.Saving() {
+		t.Error("expected saving to be false after error")
+	}
+	if model.edit.SaveErr() == nil {
+		t.Error("expected saveErr to be set")
+	}
+	if cmd != nil {
+		t.Error("expected no command after save error (should stay on form)")
+	}
+
+	// View should show the error.
+	view := model.edit.View()
+	if !strings.Contains(view, "Error:") {
+		t.Error("expected view to show API error")
 	}
 }

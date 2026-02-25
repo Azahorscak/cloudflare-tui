@@ -396,7 +396,7 @@ func (m EditModel) View() string {
 		submitText = submitStyle.Render("[ Save ]")
 	}
 
-	help := helpStyle.Render("Tab/Shift+Tab: navigate | Enter: save | Esc: cancel")
+	help := helpStyle.Render("Tab/Shift+Tab: navigate | Space: toggle proxied | Enter: save | Esc: cancel")
 
 	// Build the view with inline validation errors
 	sections := []string{subtitle, "", typeRow}
