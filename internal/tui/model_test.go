@@ -929,3 +929,287 @@ func TestEditModel_ViewSavingHidesSubmitButton(t *testing.T) {
 		t.Error("expected Saving indicator in saving view")
 	}
 }
+
+// --- Step 13 tests: edit view integration with root model and records table ---
+
+func TestModel_EditRecordMsgTransitionsToEdit(t *testing.T) {
+	m := New(nil)
+
+	// Transition to records first.
+	zone := api.Zone{ID: "zone-1", Name: "example.com"}
+	updated, _ := m.Update(selectZoneMsg{zone: zone})
+	model := updated.(Model)
+
+	// Send editRecordMsg.
+	rec := newTestRecord()
+	updated, cmd := model.Update(editRecordMsg{record: rec})
+	model = updated.(Model)
+
+	if model.currentView != ViewEdit {
+		t.Errorf("expected ViewEdit after editRecordMsg, got %d", model.currentView)
+	}
+	if cmd == nil {
+		t.Error("expected Init command from EditModel")
+	}
+}
+
+func TestModel_CancelEditMsgTransitionsBackToRecords(t *testing.T) {
+	m := New(nil)
+
+	// Transition to records, then edit.
+	zone := api.Zone{ID: "zone-1", Name: "example.com"}
+	updated, _ := m.Update(selectZoneMsg{zone: zone})
+	model := updated.(Model)
+
+	rec := newTestRecord()
+	updated, _ = model.Update(editRecordMsg{record: rec})
+	model = updated.(Model)
+
+	if model.currentView != ViewEdit {
+		t.Fatalf("expected ViewEdit, got %d", model.currentView)
+	}
+
+	// Cancel the edit.
+	updated, cmd := model.Update(cancelEditMsg{})
+	model = updated.(Model)
+
+	if model.currentView != ViewRecords {
+		t.Errorf("expected ViewRecords after cancelEditMsg, got %d", model.currentView)
+	}
+	if cmd != nil {
+		t.Error("expected no command after cancel")
+	}
+}
+
+func TestModel_EditDoneMsgTransitionsBackToRecordsWithStatus(t *testing.T) {
+	m := New(nil)
+
+	// Transition to records first.
+	zone := api.Zone{ID: "zone-1", Name: "example.com"}
+	updated, _ := m.Update(selectZoneMsg{zone: zone})
+	model := updated.(Model)
+
+	rec := newTestRecord()
+	updated, _ = model.Update(editRecordMsg{record: rec})
+	model = updated.(Model)
+
+	// Simulate successful save.
+	savedRecord := api.DNSRecord{
+		ID:      "rec-1",
+		Type:    "A",
+		Name:    "updated.example.com",
+		Content: "192.0.2.99",
+		TTL:     300,
+		Proxied: true,
+	}
+	updated, cmd := model.Update(editDoneMsg{record: savedRecord})
+	model = updated.(Model)
+
+	if model.currentView != ViewRecords {
+		t.Errorf("expected ViewRecords after editDoneMsg, got %d", model.currentView)
+	}
+	if model.records.statusMsg == "" {
+		t.Error("expected status message to be set after successful save")
+	}
+	if !strings.Contains(model.records.statusMsg, "updated.example.com") {
+		t.Errorf("expected status message to contain record name, got %q", model.records.statusMsg)
+	}
+	if !strings.Contains(model.records.statusMsg, "saved successfully") {
+		t.Errorf("expected status message to contain 'saved successfully', got %q", model.records.statusMsg)
+	}
+	if cmd == nil {
+		t.Error("expected batch command (fetchRecords + clearStatus) after editDoneMsg")
+	}
+}
+
+func TestRecordsModel_EnterEmitsEditRecordMsg(t *testing.T) {
+	zone := api.Zone{ID: "z1", Name: "example.com"}
+	m := NewRecordsModel(nil, zone, 80, 24)
+	m.loading = false
+
+	// Populate records and build table.
+	records := []api.DNSRecord{
+		{ID: "rec-1", Type: "A", Name: "example.com", Content: "192.0.2.1", TTL: 300, Proxied: true},
+		{ID: "rec-2", Type: "CNAME", Name: "www.example.com", Content: "example.com", TTL: 1, Proxied: false},
+	}
+	m.records = records
+	m.table = m.buildTable(records)
+
+	// Press Enter on the first row (cursor defaults to 0).
+	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	if cmd == nil {
+		t.Fatal("expected command from enter on record, got nil")
+	}
+	msg := cmd()
+	edit, ok := msg.(editRecordMsg)
+	if !ok {
+		t.Fatalf("expected editRecordMsg, got %T", msg)
+	}
+	if edit.record.ID != "rec-1" {
+		t.Errorf("expected record ID 'rec-1', got %q", edit.record.ID)
+	}
+	if edit.record.Name != "example.com" {
+		t.Errorf("expected record name 'example.com', got %q", edit.record.Name)
+	}
+}
+
+func TestRecordsModel_EnterNoOpWhileLoading(t *testing.T) {
+	zone := api.Zone{ID: "z1", Name: "example.com"}
+	m := NewRecordsModel(nil, zone, 80, 24)
+	// m.loading is true by default
+
+	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	if cmd != nil {
+		t.Error("expected no command from enter while loading")
+	}
+}
+
+func TestRecordsModel_EnterNoOpWithNoRecords(t *testing.T) {
+	zone := api.Zone{ID: "z1", Name: "example.com"}
+	m := NewRecordsModel(nil, zone, 80, 24)
+	m.loading = false
+	m.records = []api.DNSRecord{}
+
+	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	if cmd != nil {
+		t.Error("expected no command from enter with no records")
+	}
+}
+
+func TestRecordsModel_StatusClearMsgClearsStatus(t *testing.T) {
+	zone := api.Zone{ID: "z1", Name: "example.com"}
+	m := NewRecordsModel(nil, zone, 80, 24)
+	m.loading = false
+	m.statusMsg = "Record saved successfully"
+
+	m, _ = m.Update(statusClearMsg{})
+	if m.statusMsg != "" {
+		t.Errorf("expected statusMsg to be cleared, got %q", m.statusMsg)
+	}
+}
+
+func TestRecordsModel_ViewRendersStatusMsg(t *testing.T) {
+	zone := api.Zone{ID: "z1", Name: "example.com"}
+	m := NewRecordsModel(nil, zone, 80, 24)
+	m.loading = false
+	m.records = []api.DNSRecord{
+		{ID: "rec-1", Type: "A", Name: "example.com", Content: "192.0.2.1", TTL: 300, Proxied: true},
+	}
+	m.table = m.buildTable(m.records)
+	m.statusMsg = "Record \"example.com\" saved successfully"
+
+	view := m.View()
+	if !strings.Contains(view, "saved successfully") {
+		t.Error("expected view to contain status message 'saved successfully'")
+	}
+}
+
+func TestRecordsModel_ViewNoStatusMsgWhenEmpty(t *testing.T) {
+	zone := api.Zone{ID: "z1", Name: "example.com"}
+	m := NewRecordsModel(nil, zone, 80, 24)
+	m.loading = false
+	m.records = []api.DNSRecord{
+		{ID: "rec-1", Type: "A", Name: "example.com", Content: "192.0.2.1", TTL: 300, Proxied: true},
+	}
+	m.table = m.buildTable(m.records)
+
+	view := m.View()
+	if strings.Contains(view, "saved successfully") {
+		t.Error("expected no status message when statusMsg is empty")
+	}
+}
+
+func TestRecordsModel_HelpBarShowsEditHint(t *testing.T) {
+	zone := api.Zone{ID: "z1", Name: "example.com"}
+	m := NewRecordsModel(nil, zone, 80, 24)
+	m.loading = false
+	m.records = []api.DNSRecord{
+		{ID: "rec-1", Type: "A", Name: "example.com", Content: "192.0.2.1", TTL: 300, Proxied: true},
+	}
+	m.table = m.buildTable(m.records)
+
+	view := m.View()
+	if !strings.Contains(view, "Enter: edit record") {
+		t.Error("expected help bar to contain 'Enter: edit record'")
+	}
+}
+
+func TestModel_FullNavigationLoop(t *testing.T) {
+	// Test the full loop: zones -> records -> edit -> records (cancel)
+	m := New(nil)
+
+	// Start at zones.
+	if m.currentView != ViewZones {
+		t.Fatalf("expected ViewZones, got %d", m.currentView)
+	}
+
+	// Transition to records.
+	zone := api.Zone{ID: "zone-1", Name: "example.com"}
+	updated, _ := m.Update(selectZoneMsg{zone: zone})
+	model := updated.(Model)
+	if model.currentView != ViewRecords {
+		t.Fatalf("expected ViewRecords, got %d", model.currentView)
+	}
+
+	// Transition to edit.
+	rec := newTestRecord()
+	updated, _ = model.Update(editRecordMsg{record: rec})
+	model = updated.(Model)
+	if model.currentView != ViewEdit {
+		t.Fatalf("expected ViewEdit, got %d", model.currentView)
+	}
+
+	// Cancel back to records.
+	updated, _ = model.Update(cancelEditMsg{})
+	model = updated.(Model)
+	if model.currentView != ViewRecords {
+		t.Fatalf("expected ViewRecords after cancel, got %d", model.currentView)
+	}
+
+	// Back to zones.
+	updated, _ = model.Update(backToZonesMsg{})
+	model = updated.(Model)
+	if model.currentView != ViewZones {
+		t.Fatalf("expected ViewZones after back, got %d", model.currentView)
+	}
+}
+
+func TestModel_FullEditSaveLoop(t *testing.T) {
+	// Test: zones -> records -> edit -> save -> records (with status)
+	m := New(nil)
+
+	// Transition to records.
+	zone := api.Zone{ID: "zone-1", Name: "example.com"}
+	updated, _ := m.Update(selectZoneMsg{zone: zone})
+	model := updated.(Model)
+
+	// Transition to edit.
+	rec := newTestRecord()
+	updated, _ = model.Update(editRecordMsg{record: rec})
+	model = updated.(Model)
+	if model.currentView != ViewEdit {
+		t.Fatalf("expected ViewEdit, got %d", model.currentView)
+	}
+
+	// Simulate successful save.
+	savedRecord := api.DNSRecord{
+		ID:      "rec-1",
+		Type:    "A",
+		Name:    "example.com",
+		Content: "192.0.2.99",
+		TTL:     300,
+		Proxied: true,
+	}
+	updated, cmd := model.Update(editDoneMsg{record: savedRecord})
+	model = updated.(Model)
+
+	if model.currentView != ViewRecords {
+		t.Fatalf("expected ViewRecords after editDoneMsg, got %d", model.currentView)
+	}
+	if model.records.statusMsg == "" {
+		t.Error("expected status message after save")
+	}
+	if cmd == nil {
+		t.Error("expected batch command (fetch + clearStatus) after save")
+	}
+}
