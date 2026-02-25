@@ -40,21 +40,23 @@ type RecordsModel struct {
 	statusMsg string
 	width     int
 	height    int
+	readOnly  bool
 }
 
 // NewRecordsModel creates a new DNS records table model for the given zone.
-func NewRecordsModel(client *api.Client, zone api.Zone, width, height int) RecordsModel {
+func NewRecordsModel(client *api.Client, zone api.Zone, width, height int, readOnly bool) RecordsModel {
 	sp := spinner.New()
 	sp.Spinner = spinner.Dot
 	sp.Style = lipgloss.NewStyle().Foreground(lipgloss.Color("205"))
 
 	return RecordsModel{
-		client:  client,
-		zone:    zone,
-		spinner: sp,
-		loading: true,
-		width:   width,
-		height:  height,
+		client:   client,
+		zone:     zone,
+		spinner:  sp,
+		loading:  true,
+		width:    width,
+		height:   height,
+		readOnly: readOnly,
 	}
 }
 
@@ -162,7 +164,7 @@ func (m RecordsModel) Update(msg tea.Msg) (RecordsModel, tea.Cmd) {
 		if key == "q" || key == "esc" {
 			return m, func() tea.Msg { return backToZonesMsg{} }
 		}
-		if key == "enter" && !m.loading && m.err == nil && len(m.records) > 0 {
+		if key == "enter" && !m.readOnly && !m.loading && m.err == nil && len(m.records) > 0 {
 			cursor := m.table.Cursor()
 			if cursor >= 0 && cursor < len(m.records) {
 				record := m.records[cursor]
@@ -193,10 +195,14 @@ func (m RecordsModel) View() string {
 		Padding(0, 0, 1, 2).
 		Render(fmt.Sprintf("DNS Records - %s", sanitize(m.zone.Name)))
 
+	helpText := "↑/↓: navigate | Enter: edit record | q/Esc: back | Ctrl+C: quit"
+	if m.readOnly {
+		helpText = "↑/↓: navigate | q/Esc: back | Ctrl+C: quit  [READ-ONLY]"
+	}
 	help := lipgloss.NewStyle().
 		Faint(true).
 		Padding(1, 0, 0, 2).
-		Render("↑/↓: navigate | Enter: edit record | q/Esc: back | Ctrl+C: quit")
+		Render(helpText)
 
 	result := header + "\n" + m.table.View() + "\n"
 

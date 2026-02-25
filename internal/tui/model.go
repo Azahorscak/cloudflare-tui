@@ -36,14 +36,17 @@ type Model struct {
 	edit        EditModel
 	width       int
 	height      int
+	readOnly    bool
 }
 
 // New creates a new root Model with the given API client.
-func New(client *api.Client) Model {
+// When readOnly is true, all mutating operations (editing records) are disabled.
+func New(client *api.Client, readOnly bool) Model {
 	return Model{
 		currentView: ViewZones,
 		client:      client,
 		zones:       NewZonesModel(client),
+		readOnly:    readOnly,
 	}
 }
 
@@ -65,7 +68,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case selectZoneMsg:
 		m.currentView = ViewRecords
-		m.records = NewRecordsModel(m.client, msg.zone, m.width, m.height)
+		m.records = NewRecordsModel(m.client, msg.zone, m.width, m.height, m.readOnly)
 		return m, m.records.Init()
 
 	case backToZonesMsg:
@@ -73,6 +76,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case editRecordMsg:
+		if m.readOnly {
+			return m, nil
+		}
 		m.currentView = ViewEdit
 		m.edit = NewEditModel(m.client, m.records.zone.ID, m.records.zone.Name, msg.record, m.width, m.height)
 		return m, m.edit.Init()
