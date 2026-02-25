@@ -17,6 +17,7 @@ func main() {
 	secret := flag.String("secret", "", "Kubernetes secret in namespace/secret-name format (required)")
 	secretKey := flag.String("secret-key", "cloudflare_api_token", "key within the Kubernetes secret that holds the Cloudflare API token")
 	kubeconfig := flag.String("kubeconfig", "", "path to kubeconfig file (optional, uses default context if omitted)")
+	readOnly := flag.Bool("readonly", false, "launch in read-only mode (no changes can be made)")
 	flag.Parse()
 
 	if *secret == "" {
@@ -34,7 +35,7 @@ func main() {
 	}
 
 	client := api.NewClient(cfg)
-	model := tui.New(client)
+	model := tui.New(client, *readOnly)
 
 	p := tea.NewProgram(model, tea.WithAltScreen())
 	if _, err := p.Run(); err != nil {

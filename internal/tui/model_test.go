@@ -14,14 +14,14 @@ import (
 )
 
 func TestNew_StartsAtZonesView(t *testing.T) {
-	m := New(nil)
+	m := New(nil, false)
 	if m.currentView != ViewZones {
 		t.Errorf("expected initial view to be ViewZones, got %d", m.currentView)
 	}
 }
 
 func TestModel_ViewTransitionToRecords(t *testing.T) {
-	m := New(nil)
+	m := New(nil, false)
 
 	zone := api.Zone{ID: "zone-1", Name: "example.com"}
 	updated, _ := m.Update(selectZoneMsg{zone: zone})
@@ -33,7 +33,7 @@ func TestModel_ViewTransitionToRecords(t *testing.T) {
 }
 
 func TestModel_ViewTransitionBackToZones(t *testing.T) {
-	m := New(nil)
+	m := New(nil, false)
 
 	// Transition to records first.
 	updated, _ := m.Update(selectZoneMsg{zone: api.Zone{ID: "z1", Name: "example.com"}})
@@ -49,7 +49,7 @@ func TestModel_ViewTransitionBackToZones(t *testing.T) {
 }
 
 func TestModel_CtrlCReturnsQuit(t *testing.T) {
-	m := New(nil)
+	m := New(nil, false)
 	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyCtrlC})
 	if cmd == nil {
 		t.Fatal("expected quit command from ctrl+c, got nil")
@@ -62,7 +62,7 @@ func TestModel_CtrlCReturnsQuit(t *testing.T) {
 }
 
 func TestModel_WindowSizeMsg(t *testing.T) {
-	m := New(nil)
+	m := New(nil, false)
 	updated, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
 	model := updated.(Model)
 
@@ -95,7 +95,7 @@ func TestZonesModel_ErrorView(t *testing.T) {
 
 func TestRecordsModel_LoadingView(t *testing.T) {
 	zone := api.Zone{ID: "z1", Name: "example.com"}
-	m := NewRecordsModel(nil, zone, 80, 24)
+	m := NewRecordsModel(nil, zone, 80, 24, false)
 	view := m.View()
 	if !strings.Contains(view, "Loading DNS records") {
 		t.Errorf("expected loading view to contain 'Loading DNS records', got: %s", view)
@@ -107,7 +107,7 @@ func TestRecordsModel_LoadingView(t *testing.T) {
 
 func TestRecordsModel_ErrorView(t *testing.T) {
 	zone := api.Zone{ID: "z1", Name: "example.com"}
-	m := NewRecordsModel(nil, zone, 80, 24)
+	m := NewRecordsModel(nil, zone, 80, 24, false)
 	m.loading = false
 	m.err = &testError{msg: "invalid token"}
 
@@ -122,7 +122,7 @@ func TestRecordsModel_ErrorView(t *testing.T) {
 
 func TestRecordsModel_BackKeyReturnsBackMsg(t *testing.T) {
 	zone := api.Zone{ID: "z1", Name: "example.com"}
-	m := NewRecordsModel(nil, zone, 80, 24)
+	m := NewRecordsModel(nil, zone, 80, 24, false)
 	m.loading = false
 
 	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'q'}})
@@ -137,7 +137,7 @@ func TestRecordsModel_BackKeyReturnsBackMsg(t *testing.T) {
 
 func TestRecordsModel_EscKeyReturnsBackMsg(t *testing.T) {
 	zone := api.Zone{ID: "z1", Name: "example.com"}
-	m := NewRecordsModel(nil, zone, 80, 24)
+	m := NewRecordsModel(nil, zone, 80, 24, false)
 	m.loading = false
 
 	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEscape})
@@ -152,7 +152,7 @@ func TestRecordsModel_EscKeyReturnsBackMsg(t *testing.T) {
 
 func TestRecordsModel_BuildTable(t *testing.T) {
 	zone := api.Zone{ID: "z1", Name: "example.com"}
-	m := NewRecordsModel(nil, zone, 80, 24)
+	m := NewRecordsModel(nil, zone, 80, 24, false)
 
 	records := []api.DNSRecord{
 		{Type: "A", Name: "example.com", Content: "192.0.2.1", TTL: 300, Proxied: true},
@@ -939,7 +939,7 @@ func TestEditModel_ViewSavingHidesSubmitButton(t *testing.T) {
 // --- Step 13 tests: edit view integration with root model and records table ---
 
 func TestModel_EditRecordMsgTransitionsToEdit(t *testing.T) {
-	m := New(nil)
+	m := New(nil, false)
 
 	// Transition to records first.
 	zone := api.Zone{ID: "zone-1", Name: "example.com"}
@@ -960,7 +960,7 @@ func TestModel_EditRecordMsgTransitionsToEdit(t *testing.T) {
 }
 
 func TestModel_CancelEditMsgTransitionsBackToRecords(t *testing.T) {
-	m := New(nil)
+	m := New(nil, false)
 
 	// Transition to records, then edit.
 	zone := api.Zone{ID: "zone-1", Name: "example.com"}
@@ -988,7 +988,7 @@ func TestModel_CancelEditMsgTransitionsBackToRecords(t *testing.T) {
 }
 
 func TestModel_EditDoneMsgTransitionsBackToRecordsWithStatus(t *testing.T) {
-	m := New(nil)
+	m := New(nil, false)
 
 	// Transition to records first.
 	zone := api.Zone{ID: "zone-1", Name: "example.com"}
@@ -1030,7 +1030,7 @@ func TestModel_EditDoneMsgTransitionsBackToRecordsWithStatus(t *testing.T) {
 
 func TestRecordsModel_EnterEmitsEditRecordMsg(t *testing.T) {
 	zone := api.Zone{ID: "z1", Name: "example.com"}
-	m := NewRecordsModel(nil, zone, 80, 24)
+	m := NewRecordsModel(nil, zone, 80, 24, false)
 	m.loading = false
 
 	// Populate records and build table.
@@ -1061,7 +1061,7 @@ func TestRecordsModel_EnterEmitsEditRecordMsg(t *testing.T) {
 
 func TestRecordsModel_EnterNoOpWhileLoading(t *testing.T) {
 	zone := api.Zone{ID: "z1", Name: "example.com"}
-	m := NewRecordsModel(nil, zone, 80, 24)
+	m := NewRecordsModel(nil, zone, 80, 24, false)
 	// m.loading is true by default
 
 	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
@@ -1072,7 +1072,7 @@ func TestRecordsModel_EnterNoOpWhileLoading(t *testing.T) {
 
 func TestRecordsModel_EnterNoOpWithNoRecords(t *testing.T) {
 	zone := api.Zone{ID: "z1", Name: "example.com"}
-	m := NewRecordsModel(nil, zone, 80, 24)
+	m := NewRecordsModel(nil, zone, 80, 24, false)
 	m.loading = false
 	m.records = []api.DNSRecord{}
 
@@ -1084,7 +1084,7 @@ func TestRecordsModel_EnterNoOpWithNoRecords(t *testing.T) {
 
 func TestRecordsModel_StatusClearMsgClearsStatus(t *testing.T) {
 	zone := api.Zone{ID: "z1", Name: "example.com"}
-	m := NewRecordsModel(nil, zone, 80, 24)
+	m := NewRecordsModel(nil, zone, 80, 24, false)
 	m.loading = false
 	m.statusMsg = "Record saved successfully"
 
@@ -1096,7 +1096,7 @@ func TestRecordsModel_StatusClearMsgClearsStatus(t *testing.T) {
 
 func TestRecordsModel_ViewRendersStatusMsg(t *testing.T) {
 	zone := api.Zone{ID: "z1", Name: "example.com"}
-	m := NewRecordsModel(nil, zone, 80, 24)
+	m := NewRecordsModel(nil, zone, 80, 24, false)
 	m.loading = false
 	m.records = []api.DNSRecord{
 		{ID: "rec-1", Type: "A", Name: "example.com", Content: "192.0.2.1", TTL: 300, Proxied: true},
@@ -1112,7 +1112,7 @@ func TestRecordsModel_ViewRendersStatusMsg(t *testing.T) {
 
 func TestRecordsModel_ViewNoStatusMsgWhenEmpty(t *testing.T) {
 	zone := api.Zone{ID: "z1", Name: "example.com"}
-	m := NewRecordsModel(nil, zone, 80, 24)
+	m := NewRecordsModel(nil, zone, 80, 24, false)
 	m.loading = false
 	m.records = []api.DNSRecord{
 		{ID: "rec-1", Type: "A", Name: "example.com", Content: "192.0.2.1", TTL: 300, Proxied: true},
@@ -1127,7 +1127,7 @@ func TestRecordsModel_ViewNoStatusMsgWhenEmpty(t *testing.T) {
 
 func TestRecordsModel_HelpBarShowsEditHint(t *testing.T) {
 	zone := api.Zone{ID: "z1", Name: "example.com"}
-	m := NewRecordsModel(nil, zone, 80, 24)
+	m := NewRecordsModel(nil, zone, 80, 24, false)
 	m.loading = false
 	m.records = []api.DNSRecord{
 		{ID: "rec-1", Type: "A", Name: "example.com", Content: "192.0.2.1", TTL: 300, Proxied: true},
@@ -1143,9 +1143,70 @@ func TestRecordsModel_HelpBarShowsEditHint(t *testing.T) {
 	}
 }
 
+func TestRecordsModel_ReadOnlyEnterNoOp(t *testing.T) {
+	zone := api.Zone{ID: "z1", Name: "example.com"}
+	m := NewRecordsModel(nil, zone, 80, 24, true) // readOnly=true
+	m.loading = false
+
+	records := []api.DNSRecord{
+		{ID: "rec-1", Type: "A", Name: "example.com", Content: "192.0.2.1", TTL: 300, Proxied: true},
+	}
+	m.records = records
+	m.table = m.buildTable(records)
+
+	// Press Enter — should NOT emit editRecordMsg in read-only mode.
+	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	if cmd != nil {
+		t.Error("expected no command from enter in read-only mode, but got one")
+	}
+}
+
+func TestRecordsModel_ReadOnlyHelpBar(t *testing.T) {
+	zone := api.Zone{ID: "z1", Name: "example.com"}
+	m := NewRecordsModel(nil, zone, 80, 24, true) // readOnly=true
+	m.loading = false
+	m.records = []api.DNSRecord{
+		{ID: "rec-1", Type: "A", Name: "example.com", Content: "192.0.2.1", TTL: 300, Proxied: true},
+	}
+	m.table = m.buildTable(m.records)
+
+	view := m.View()
+	if strings.Contains(view, "Enter: edit record") {
+		t.Error("read-only help bar should NOT contain 'Enter: edit record'")
+	}
+	if !strings.Contains(view, "READ-ONLY") {
+		t.Error("read-only help bar should contain 'READ-ONLY' indicator")
+	}
+}
+
+func TestModel_ReadOnlyBlocksEditRecordMsg(t *testing.T) {
+	m := New(nil, true) // readOnly=true
+
+	// Transition to records.
+	zone := api.Zone{ID: "zone-1", Name: "example.com"}
+	updated, _ := m.Update(selectZoneMsg{zone: zone})
+	model := updated.(Model)
+
+	if model.currentView != ViewRecords {
+		t.Fatalf("expected ViewRecords, got %d", model.currentView)
+	}
+
+	// Try sending an editRecordMsg — should be ignored.
+	record := api.DNSRecord{ID: "rec-1", Type: "A", Name: "example.com", Content: "192.0.2.1", TTL: 300, Proxied: true}
+	updated, cmd := model.Update(editRecordMsg{record: record})
+	model = updated.(Model)
+
+	if model.currentView != ViewRecords {
+		t.Errorf("expected to stay on ViewRecords in read-only mode, got %d", model.currentView)
+	}
+	if cmd != nil {
+		t.Error("expected no command from editRecordMsg in read-only mode")
+	}
+}
+
 func TestModel_FullNavigationLoop(t *testing.T) {
 	// Test the full loop: zones -> records -> edit -> records (cancel)
-	m := New(nil)
+	m := New(nil, false)
 
 	// Start at zones.
 	if m.currentView != ViewZones {
@@ -1185,7 +1246,7 @@ func TestModel_FullNavigationLoop(t *testing.T) {
 
 func TestModel_FullEditSaveLoop(t *testing.T) {
 	// Test: zones -> records -> edit -> save -> records (with status)
-	m := New(nil)
+	m := New(nil, false)
 
 	// Transition to records.
 	zone := api.Zone{ID: "zone-1", Name: "example.com"}
@@ -1539,7 +1600,7 @@ func TestEditFlow_IntegrationWithMockedAPI(t *testing.T) {
 
 	cfg := &config.Config{APIToken: "test-token"}
 	client := api.NewClientWithBaseURL(cfg, srv.URL)
-	m := New(client)
+	m := New(client, false)
 
 	// Step 1: start at zones.
 	if m.currentView != ViewZones {
@@ -1672,7 +1733,7 @@ func TestEditFlow_IntegrationAPIError(t *testing.T) {
 
 	cfg := &config.Config{APIToken: "bad-token"}
 	client := api.NewClientWithBaseURL(cfg, srv.URL)
-	m := New(client)
+	m := New(client, false)
 
 	// Navigate to edit.
 	zone := api.Zone{ID: "zone-1", Name: "example.com"}
