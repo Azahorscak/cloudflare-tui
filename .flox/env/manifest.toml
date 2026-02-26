@@ -1,0 +1,40 @@
+version = 1
+
+[install]
+go.pkg-path = "go"
+go.version = "^1.26"
+golangci-lint.pkg-path = "golangci-lint"
+kubectl.pkg-path = "kubectl"
+git.pkg-path = "git"
+gnumake.pkg-path = "gnumake"
+
+[vars]
+CGO_ENABLED = "0"
+
+[hook]
+on-activate = '''
+  export GOENV="$FLOX_ENV_CACHE/goenv"
+  export GOPATH="$FLOX_ENV_CACHE/gopath"
+  export GOBIN="$FLOX_ENV_CACHE/gopath/bin"
+  export PATH="$GOBIN:$PATH"
+  echo "Syncing Go module dependencies..."
+  go mod download
+'''
+
+[profile]
+common = '''
+  echo ""
+  echo "cloudflare-tui dev environment ready"
+  echo "  go version: $(go version | awk '{print $3}')"
+  echo "  Run 'make help' for available commands."
+  echo ""
+'''
+
+[build.cloudflare-tui]
+description = "Cloudflare DNS management TUI"
+sandbox = "pure"
+command = '''
+  export CGO_ENABLED=0
+  mkdir -p "$out/bin"
+  go build -trimpath -ldflags="-s -w" -o "$out/bin/cloudflare-tui" ./cmd/cloudflare-tui
+'''
