@@ -21,3 +21,8 @@ credentials.json
 # OS
 .DS_Store
 Thumbs.db
+
+# Flox
+.flox/env.lock
+.flox/cache/
+result-*
