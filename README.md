@@ -2,19 +2,47 @@
 
 A terminal UI for browsing and editing Cloudflare DNS records, powered by credentials stored in a Kubernetes secret.
 
-## Prerequisites
+## Development
 
-- Go 1.22+
-- Access to a Kubernetes cluster with a secret containing a Cloudflare API token
-- The secret must have a key named `cloudflare_api_token`
+This project uses [Flox](https://flox.dev) for reproducible development environments. All tools (Go, linter, kubectl, make) are provided automatically — no manual installation required.
 
-## Build
+### Prerequisites
+
+Install Flox: https://flox.dev/docs/install/
+
+You also need access to a Kubernetes cluster with a secret containing a Cloudflare API token (see [Usage](#usage) below).
+
+### Quick start
 
 ```bash
-go build -o cloudflare-tui ./cmd/cloudflare-tui
+git clone <repo-url>
+cd cloudflare-tui
+flox activate          # enters the dev environment
+make help              # see available commands
+make all               # lint, test, build
 ```
 
-For a hardened production build that strips file paths and debug symbols:
+### Available make targets
+
+| Target  | Description                    |
+|---------|--------------------------------|
+| `build` | Build the binary               |
+| `test`  | Run all tests                  |
+| `lint`  | Run golangci-lint              |
+| `all`   | Lint, test, and build          |
+| `clean` | Remove build artifacts         |
+| `help`  | Show available targets         |
+
+### Reproducible build
+
+```bash
+flox build             # build in isolated sandbox
+./result-cloudflare-tui/bin/cloudflare-tui --help
+```
+
+### Without Flox
+
+If you prefer not to use Flox, ensure you have Go 1.26+, golangci-lint, kubectl, and make installed:
 
 ```bash
 go build -trimpath -ldflags="-s -w" -o cloudflare-tui ./cmd/cloudflare-tui
@@ -85,11 +113,11 @@ See [SECURITY.md](SECURITY.md) for the minimal RBAC role needed to read this sec
 ## Testing
 
 ```bash
-go test ./...
+make test        # or: go test ./...
 ```
 
 ## Linting
 
 ```bash
-golangci-lint run ./...
+make lint        # or: golangci-lint run ./...
 ```
